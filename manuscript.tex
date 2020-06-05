@@ -1,0 +1,59 @@
+\documentclass[a4paper, 14pt]{article}
+\usepackage{style}
+\usepackage{fancyhdr}
+\usepackage[backend=biber]{biblatex}
+\usepackage{csquotes}
+\usepackage{fancyhdr}
+
+\fancypagestyle{bib}{
+	\fancyhf{}
+	\rhead{\scshape\it{{СПИСОК ЛИТЕРАТУРЫ}}}
+	\fancyfoot[C]{\thepage}
+	\renewcommand{\headrulewidth}{0.4pt}
+}
+
+\pagestyle{fancy}
+\delimitershortfall-1sp
+\usepackage[fontsize=14pt]{scrextend}
+\renewcommand{\baselinestretch}{1.3}
+
+\newcommand{\anonsection}[1]{
+    \phantomsection % Корректный переход по ссылкам в содержании
+    \section*{#1}
+    \addcontentsline{toc}{section}{\uppercase{#1}}
+}
+
+\addbibresource{references.bib}
+
+%\renewcommand\refname{Список использованных источников}
+
+\begin{document}
+\maketitle
+\newpage
+
+\subfile{annotation}
+\newpage
+
+\tableofcontents
+\newpage
+
+\subfile{glossary}
+\newpage
+
+\subfile{introduction}
+\newpage
+
+\subfile{materials_and_methods}
+\newpage
+
+%\subfile{results}
+%\newpage
+
+%\subfile{conclusions}
+
+\nocite{*}
+\newpage
+%\pagestyle{bib}
+\printbibliography
+
+\end{document}
