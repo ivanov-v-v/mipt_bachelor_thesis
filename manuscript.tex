@@ -24,8 +24,7 @@
 }
 
 \addbibresource{references.bib}
-
-%\renewcommand\refname{Список использованных источников}
+\renewcommand\refname{Список использованных источников}
 
 \begin{document}
 \maketitle
@@ -50,10 +49,14 @@
 %\newpage
 
 %\subfile{conclusions}
+%\newpage
 
+\subfile{acknowledgements}
 \nocite{*}
 \newpage
-%\pagestyle{bib}
-\printbibliography
+
+\pagestyle{bib}
+\anonsection{Список использованных источников}
+\printbibliography[heading=none]
 
 \end{document}

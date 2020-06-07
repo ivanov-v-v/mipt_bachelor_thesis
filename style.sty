@@ -1,0 +1,148 @@
+\ProvidesPackage{style}
+
+\usepackage[ruled,vlined]{algorithm2e}
+\usepackage{amsfonts}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{amsthm}
+\usepackage{array}
+\usepackage{bm}
+\usepackage{cancel}
+
+\usepackage{chngcntr}
+\counterwithin{figure}{section}
+\counterwithin{table}{section}
+
+\usepackage{epsfig} 
+\usepackage{epstopdf}
+\usepackage{faktor} 
+\usepackage{listings}
+\usepackage{tikz-cd}
+\usepackage{titling} 
+\usepackage{tkz-berge}
+\usepackage{multicol}
+\usepackage{url} 
+
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{lipsum}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{xparse}
+\usepackage{wrapfig}
+
+\usepackage{icomma}
+
+\usepackage{cmap}
+\usepackage[T2A]{fontenc} 
+\usepackage[utf8]{inputenc} 
+\usepackage[english,russian]{babel} 
+\usepackage[normalem]{ulem}
+\usepackage{fancyvrb}
+
+\usepackage{enumitem}
+\usepackage{listings}
+\usepackage{wrapfig}
+
+\usepackage{tikz}
+\usepackage{pgfplots}
+\usepackage{pgf}
+
+\usepackage{subfiles}
+
+\usepackage{mdframed}
+\usepackage[hidelinks]{hyperref}
+\usepackage{todonotes}
+
+\graphicspath{{Images/}{../Images/}{images/} {../images/}} 
+
+\usepackage{math}
+
+\def\E{\mathbb{E}}
+\def\Var{\mathrm{Var}}
+\def\cov{\mathrm{cov}}
+\def\corr{\mathrm{corr}}
+\def\salg{\mathcal{F}}
+\def\P{\mathrm{P}}
+\def\borel{\mathcal{B}}
+\def\cantor{\mathcal{C}}
+
+\def\eps{\varepsilon}
+\def\phi{\varphi}
+\def\Real{\mathbb{R}}
+\def\Proj{\mathbb{P}}
+\def\Hyper{\mathbb{H}}
+\def\Z{\mathbb{Z}}
+\def\N{\mathbb{N}}
+\def\C{\mathbb{C}}
+\def\R{\mathbb{Q}}
+\def\tr{\mbox{tr}}
+\def\grad{\nabla}
+\def\mse{\mbox{MSE}}
+\def\etheta{\widehat{\theta}}
+
+\def\le{\leqslant}
+\def\ge{\geqslant}
+
+\theoremstyle{plain}
+\newtheorem{theorem}{Теорема}[section]
+\newtheorem*{hypo}{Гипотеза}
+\newtheorem{lemma}{Лемма}[section]
+\newtheorem{corollary}{Следствие}
+\newtheorem*{fact}{Факт}
+
+\theoremstyle{remark}
+\newtheorem{claim}{Утверждение}[section]
+\newtheorem{remark}{Замечание}[section]
+\newtheorem*{task}{Упражнение}
+\newtheorem*{symb}{Обозначение}
+
+\theoremstyle{definition}
+\newtheorem{definition}{Определение}[section]
+\newtheorem{example}{Пример}[section]
+
+\newenvironment{solution}
+  {\begin{proof}[Решение:]}
+  {\end{proof}}
+
+\renewcommand*{\maketitle}{
+\begin{titlepage}
+	\centering
+	{\scshape\large министерство образования и науки российской федерации\par}
+	\vspace{0.5cm}
+	{\scshape\large государственное образовательное учреждение высшего образования\par}
+	{\scshape\large"московский физико-технический институт (национальный исследовательский институт)" \par}
+	\vspace{0.5cm}
+	{\scshape\large физтех-школа прикладной математики и информатики\par}
+	\vspace{0.5cm}
+	{\scshape\large кафедра дискретной математики}
+	\vspace{1cm}
+	\rule{150mm}{.1pt}
+	{\scshape\largeВыпускная квалификационная работа по направлению 01.03.02\par прикладная математика и информатика\par}
+	{\scshape на тему:\par}
+	{\scshape{\bf Вариационный байесовский вывод в графических моделях в задаче восстановления клональной структуры опухоли}}
+	
+    \vspace{1.5cm}	
+    \hfill \break
+    Студент \underline{\hspace{10.5cm}} Иванов В.В.\par
+    Научный руководитель к.ф-м.н. \underline{\hspace{4.8cm}}  Yuanhua Huang.\par
+    Зав. кафедрой д.ф-м.н., профессор \underline{\hspace{3.1cm}}  Райгородский А.М.\par
+    \begin{center}
+    МОСКВА, 2020
+    \end{center}
+\end{titlepage}
+
+}
+
+\newcommand{\Section}[2]{
+\section*{#1\quad #2}
+\addcontentsline{toc}{section}{#1\quad #2}
+\stepcounter{section}
+}
+
+\newcommand{\Subsection}[2]{
+\section*{#1\quad #2}
+\addcontentsline{toc}{subsection}{#1\quad #2}
+\stepcounter{subsection}
+}
