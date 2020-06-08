@@ -1,0 +1,650 @@
+\documentclass[11pt,a4paper,fullpage]{article}
+\usepackage[a4paper, left=20mm, right=20mm, top=30mm, bottom=20mm]{geometry}
+\usepackage{amsmath,amsfonts,amssymb,amsthm,epsfig,epstopdf, faktor, titling,url,array,tkz-berge}
+\usepackage[T2A,T1]{fontenc}
+\usepackage[utf8]{inputenc}
+
+\usepackage[english]{babel}
+
+\usepackage{xparse}
+\usepackage[shortlabels]{enumitem}
+\usepackage{float}
+\usepackage{cancel}
+\usepackage{multicol}
+\usepackage{listings}
+\usepackage{tikz-cd}
+
+\usepackage{hyperref}
+\hypersetup{
+	colorlinks=true,
+	linkcolor=blue,
+	filecolor=magenta,      
+	urlcolor=blue,
+}
+\def\E{\mathbb{E}}
+\def\Var{\mathrm{Var}}
+\def\cov{\mathrm{cov}}
+\def\corr{\mathrm{corr}}
+\def\salg{\mathcal{F}}
+\def\P{\mathrm{P}}
+\def\borel{\mathcal{B}}
+\def\cantor{\mathcal{C}}
+
+\def\eps{\varepsilon}
+\def\phi{\varphi}
+\def\Real{\mathbb{R}}
+\def\Proj{\mathbb{P}}
+\def\Hyper{\mathbb{H}}
+\def\Z{\mathbb{Z}}
+\def\N{\mathbb{N}}
+\def\C{\mathbb{C}}
+\def\R{\mathbb{Q}}
+\def \tr{\mbox{tr}}
+\def \grad{\nabla}
+\def \mse{\mbox{MSE}}
+\def \etheta{\widehat{\theta}}
+
+\def\le{\leqslant}
+\def\ge{\geqslant}
+
+\usepackage{eucal}
+\usepackage{stackengine,graphicx,amssymb}
+\stackMath
+\newcommand\frightarrow{\scalebox{1}[.3]{$\rule[.45ex]{2ex}{1.5pt}%
+		\kern-.2ex{\blacktriangleright}$}}
+\newcommand\darrow[1][]{\mathrel{\stackon[1pt]{\stackanchor[1pt]{\frightarrow}{\frightarrow}}{\scriptstyle#1}}}
+
+\newcommand\independent{\protect\mathpalette{\protect\independenT}{\perp}}
+\def\independenT#1#2{\mathrel{\rlap{$#1#2$}\mkern2mu{#1#2}}}
+\renewcommand{\thesection}{\arabic{section}}
+
+
+\theoremstyle{definition}
+\newtheorem{problem}{Problem}
+\newtheorem*{uproblem}{Problem}
+
+\theoremstyle{definition}
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{lemma}{Lemma}[section]
+\newtheorem{statement}{Statement}[section]
+\newtheorem*{corollary}{Corollary} 
+\theoremstyle{definition}
+\newtheorem{definition}{Definiton}[section]
+\newtheorem{example}{Example}[section]
+
+\newcommand\mydots{\makebox[1em][c]{.\hfil.\hfil.}}
+\renewcommand{\thesection}{\arabic{section}}
+
+\usetikzlibrary{arrows.meta}
+\usetikzlibrary{shapes.geometric}
+\usepackage{etoolbox}
+
+% Select what to do with todonotes: 
+% \usepackage[disable]{todonotes} % notes not showed
+\usepackage[draft]{todonotes}   % notes showed
+
+% Select what to do with command \comment:  
+% \newcommand{\comment}[1]{}  %comment not showed
+\newcommand{\comment}[1]
+{\par {\bfseries \color{blue} #1 \par}} %comment showed
+
+\usepackage{tikz}
+\usetikzlibrary{bayesnet}
+
+\numberwithin{equation}{section}
+
+\title{XClone}
+
+\begin{document}
+	\setlength{\parindent}{1cm}
+	{\let\newpage\relax\maketitle}
+	\tableofcontents
+	\newpage 
+	\noindent Proposed modification includes two binomial mixture models: for CNV and SNV modalities respectively. Two models are coupled by the clonal label assignment.\\
+	
+	\begin{figure}[h!]
+		\centering
+		\tikz{ %
+			\node[latent] (Theta_g) {$\mathbf{\Theta^{G}}$} ; %
+			\node[obs, right=of Theta_g] (T) {$\mathbf{T}$}; %
+			\node[latent, right=of T] (I_s) {$\mathbf{I^{S}}$}; %
+			\node[latent, left=of Theta_g] (I_g_prime) {$\mathbf{I^{G'}}$}; %
+			\node[latent, below=of I_g_prime] (X_g_prime) {$\mathbf{X^{G'}}$}; %
+			\node[latent, below=of I_s] (X_g) {$\mathbf{X^{G}}$}; %
+			\node[latent, right=of I_s] (C_s) {$\mathbf{C^{S}}$}; %
+			\node[latent, right=of C_s] (theta_s) {$\mathbf{\theta^{S}}$}; %
+			\node[latent, below=of C_s] (X_s) {$\mathbf{X^{S}}$}; %
+			\node[obs, above=of C_s] (Omega) {$\Omega$}; %
+			\node[latent, right=of Omega] (xi) {$\xi$}; %
+			
+			\node[obs, below=of X_g_prime] (A_g_prime) {$\mathbf{A^{G'}}$}; %
+			\node[obs, left=of A_g_prime] (D_g_prime) {$\mathbf{D^{G'}}$}; %
+			\node[obs, below=of X_g] (A_g) {$\mathbf{A^{G}}$}; %
+			\node[obs, left=of A_g] (D_g) {$\mathbf{D^{G}}$}; %
+			\node[obs, below=of X_s] (A_s) {$\mathbf{A^{S}}$}; %
+			\node[obs, right=of A_s] (D_s) {$\mathbf{D^{S}}$}; %
+			
+			\edge {Omega} {C_s}; %
+			\edge {xi} {C_s}; %
+			
+			\edge {Theta_g} {X_g}; %
+			\edge {Theta_g} {X_g_prime}; %
+			\edge {T} {X_g} ; %
+			\edge {T} {X_g_prime}; %
+			\edge {I_s} {X_g} ; %
+			
+			\edge {I_g_prime} {X_g_prime}; %
+			\edge {I_s} {X_s} ; %
+			\edge {theta_s} {X_s}; %
+			\edge {C_s} {X_s}; %
+			
+			\edge {X_g_prime} {A_g_prime} ; %
+			\edge {D_g_prime} {A_g_prime} ; %
+			
+			\edge {X_g} {A_g} ; %
+			\edge {D_g} {A_g} ; %
+			
+			\edge {X_s} {A_s} ; %
+			\edge {D_s} {A_s} ; %
+		}
+	\end{figure}
+	
+	\noindent The most general model should have a capacity to integrate four modalities:
+	\begin{itemize}
+		\item scCNV inferred from scDNA-seq (let's call this \textbf{CNV-sample}).
+		\item scCNV and scSNV inferred from scRNA-seq (from the same cells; let's call this \textbf{SNV-sample}).
+		\item Clustering of variants inferred from bulk ($ \Omega $ in the \textit{Cardelino} paper).
+	\end{itemize}
+	The minimal implementation should be capable of integrating CNV and SNV information from the same sample. The SNV part doesn't change, it is exactly the same as in the original Cardelino paper.
+	
+	\section{CNV + SNV from the same sample}
+	Here we suppose, that CNV information is only available for germline variants and SNV information — only for somatic variants.
+	
+	\begin{figure}[h!]
+		\centering
+		\tikz{ %
+			\node[latent] (Theta_g) {$\mathbf{\Theta^{G}}$} ; %
+			\node[obs, right=of Theta_g] (T) {$\mathbf{T}$}; %
+			\node[latent, right=of T] (I_s) {$\mathbf{I^{S}}$}; %
+			\node[latent, below=of I_s] (X_g) {$\mathbf{X^{G}}$}; %
+			\node[latent, right=of I_s] (theta_s) {$\mathbf{\theta^{S}}$}; %
+			\node[latent, right=of theta_s] (C_s) {$\mathbf{C^{S}}$}; %
+			\node[latent, below=of C_s] (X_s) {$\mathbf{X^{S}}$}; %
+			\node[obs, above=of C_s] (Omega) {$\Omega$}; %
+			\node[latent, right=of Omega] (xi) {$\xi$}; %
+			
+			\node[obs, below=of X_g] (A_g) {$\mathbf{A^{G}}$}; %
+			\node[obs, right=of A_g] (D_g) {$\mathbf{D^{G}}$}; %
+			\node[obs, below=of X_s] (A_s) {$\mathbf{A^{S}}$}; %
+			\node[obs, right=of A_s] (D_s) {$\mathbf{D^{S}}$}; %
+			
+			\edge {Omega} {C_s}; %
+			\edge {xi} {C_s}; %
+			
+			\edge {Theta_g} {X_g}; %
+			\edge {T} {X_g}; %
+			\edge {T} {Theta_g} ; %
+			\edge {I_s} {X_g}; %
+			
+			\edge {I_s} {X_s} ; %
+			\edge {theta_s} {X_s}; %
+			\edge {C_s} {X_s}; %
+			
+			\edge {X_g} {A_g} ; %
+			\edge {D_g} {A_g} ; %
+			
+			\edge {X_s} {A_s} ; %
+			\edge {D_s} {A_s} ; %
+			
+		}
+	\end{figure}
+	
+	\noindent The problem is that we usually can't robustly infer CNV. We can use ASE ratios of haplotype blocks instead to define an informative prior. This can be achieved in a slightly changed model.
+	
+	\subsection{Basic definitions}
+	\begin{enumerate}
+		\item \textbf{Constants:}
+		\begin{itemize}
+			\item $ M $ — number of cells in the sample.
+			\item $ K $  — estimated number of clones in the sample \todo{will be estimated via Dirichlet processes}
+			\item $ N_{G}, N_{S} $ — number of germline variant blocks and somatic variants in the sample. 
+			\item $ \tau $ — set of possible CNV states ($\{1, \ldots, 8 \}$ for now, as the case of zero should be treated with care if we can't say for sure whether the part of the chromosome (both arms) is deleted).
+		\end{itemize}
+		\item \textbf{Other known quantities:}
+		\begin{itemize}
+			\item $ \mathbf{D^{S}} \in \N^{N_{S}\times M},\ \mathbf{D^{G}} $ — total read counts. To get a count of the block, one simply adds up the counts of the variants within the block. Here we assume that variants are far enough from each other, so that almost no reads overlap two variants at the same time. Otherwise, adding things up wouldn't make sense.
+			\item $ \mathbf{A^{S}} \in \N^{N_{S}\times M},\ \mathbf{A^{G}} $ — same for allele-specific counts.
+			\item $ \mathbf{\Omega} \in \{0, 1\}^{N_{S} \times K} $ — variant-to-clone assignment derived from bulk\todo{but how and what for?}
+			\item $ \textbf{f} = (f_1, \ldots, f_K)$ — $K$-dimensional vector of estimated clonal fractions ($ \sum_{i=1}^{K} f_i = 1 $) 
+			\item $ \mathbf{T} $ — CNV states of blocks ($\mathbf{T_{i,k}}$ is a CNV state of a block $ i $ in clone $ k $). \textbf{This information is only used to define a prior over the ASE ratio and can be ignored if absent. We can use ASE ratios of haplotype blocks as an informative prior instead.}
+		\end{itemize}
+		\item \textbf{Inferred quantities:}
+		\begin{itemize}
+			\item $ \mathbf{C} \in \{0, 1\}^{N_{S} \times K}$ —  clonal tree configuration matrix where $ \mathbf{C_{i,k}} = 1 $ if variant $ i $ is present in clone $ k $ and $ \mathbf{C_{i,k}} = 0 $ otherwise.
+			
+			\item $ \mathbf{\Theta^{G}} $ — allelic rates of variants located within blocks of fixed CNV status. $ \mathbf{\Theta^{G}_{i,t}} $ is an allelic rate of a block $i$ with a CNV status $t$. Blocks are not the same across clones. Blocks are ordered as tuples of the form (\textit{block start, block length}).
+			
+			\item $ \mathbf{\theta^{S}} \in [0, 1]^{K+1} $ — vector of allelic rates of somatic variants ($ \mathbf{\theta_0} $ is a rate of an absent variant)
+			
+			\item $ \mathbf{I^{S}} \in [K]^{M} $ — cell-to-clone assignment
+			
+			\item $ \xi \in [0, 1] $ — error rate of $ \mathbf{C} $ configuration assignment (per element).
+		\end{itemize}
+		\item \textbf{Some notational conventions:}
+		\begin{itemize}
+			\item Capitalized letter without superscript denotes the information for somatic and germline variants combined. For instance, $ \mathbf{C} $ stands for a configuration matrix that contains SNV-to-clone assignment information for somatic variants as well as variant-to-CNV assignment for germline variations. Same for $  \mathbf{A}, \mathbf{D}, \mathbf{\Theta} $ etc.
+			
+			\item $ \mathbf{H^{G}} $ — CNV status of the blocks in accordance with the current label assignment: 
+			$$ 
+			\mathbf{H^{G}_{i,j}} := \mathbf{T_{i, I^{S}_{j}}}
+			$$
+			
+			\item $ \mathbf{H^{S}} $ — presence/absence of variants in accordance with the current label assignment:
+			$$
+			\mathbf{H^{S}_{i, j} := \mathbf{C_{i, I^{S}_{j}}}}
+			$$
+			
+			\item $ \mathbf{X^{S}} \in [0, 1]^{N_{S} \times M} $ — a shortcut to simplify the notation: $$ \mathbf{X^{S}_{i,j}} := \begin{cases}
+			\mathbf{\theta^{S}_{i}} &\text{if } \mathbf{H^{S}_{i,j}} = 1,\\
+			\mathbf{\theta^{S}_{0}} &\text{otherwise}
+			\end{cases} $$
+			
+			\item  $ \mathbf{X^{G}} $ — same but for CNV modality: $ \mathbf{X^{G}_{i,j}} := \mathbf{\Theta^{G}_{i, H^{G}_{i,j}}} $, meaning that $\mathbf{X^{G}_{i,j}}$ is an allelic rate of a block $ i $ in cell $ j $ based of the current cell-to-clone label assignment.
+		\end{itemize}
+	\end{enumerate}
+	
+	\subsection{Generative model formulation}
+	\begin{itemize}
+		\item \textbf{Cell-to-clone assignment posterior:}
+		\begin{equation}
+		\P(\mathbf{I^{S}_{j}} = k_{0} \ |\  \mathbf{A_{j}}, \mathbf{D_{j}}, \mathbf{f}, \mathbf{C}, \mathbf{\Theta}) =  
+		\dfrac{\P(\mathbf{A_j} \ |\  \mathbf{D_j}, \mathbf{I^{S}_{j}} = k_{0}, \mathbf{C}, \mathbf{\Theta}) \P(\mathbf{I^{S}_{j}} = k_{0} \ |\  \textbf{f}) }{\sum\limits_{k=1}^{K}\P(\mathbf{A_j} \ |\  \mathbf{D_j}, \mathbf{I^{S}_{j}} = k, \mathbf{C}, \mathbf{\Theta}) \P(\mathbf{I^{S}_{j}} = k\ |\  \textbf{f}) }
+		\end{equation}
+		
+		\item \textbf{Posterior configuration: }
+		\begin{equation}
+		\begin{aligned}
+		\P(\mathbf{C}, \mathbf{\Theta}, \xi\ |\  \mathbf{A}, \mathbf{D}, \mathbf{\Omega}, \mathbf{f}) &= \P(\mathbf{C}, \mathbf{\theta^{S}}, \mathbf{\xi}\ |\ \mathbf{A^{S}}, \mathbf{D^{S}}, \mathbf{\Omega}, \mathbf{f}) \P(\mathbf{\Theta^{G}}\ |\ \mathbf{A^{G}}, \mathbf{D^{G}}, \mathbf{f})
+		\end{aligned}
+		\end{equation}
+		
+		\item \textbf{ASE model:}
+		\begin{equation}
+		\begin{aligned}
+		\P(\mathbf{A^S_{i,j}}\ |\ \mathbf{D^S_{i,j}}, \mathbf{\theta^{S}}) &= \mathrm{Binom}(\mathbf{A^S_{i,j}}\ |\ \mathbf{D^S_{i,j}}, \mathbf{X^{S}_{i,j}})\\
+		\P(\mathbf{A^{G}_{i,j}}\ |\ \mathbf{D^{G}_{i,j}}, \mathbf{\Theta^{G}}) &= \mathrm{Binom}(\mathbf{A^{G}_{i,j}}\ |\ \mathbf{D^{G}_{i,j}}, \mathbf{X^{G}_{i,j}}) 
+		\end{aligned}
+		\end{equation}
+		
+		\item \textbf{ASE likelihood (both terms factorize over variants):}
+		\begin{equation}
+		\begin{aligned}
+		&\P(\mathbf{A_{j}}\ |\ \mathbf{D_{j}}, \mathbf{I^{S}_{j}} = k, \mathbf{C}, \mathbf{\Theta}) = \P(\mathbf{A^{S}_{j}}\ |\ \mathbf{D^{S}_{j}}, \mathbf{I^{S}_{j}} = k, \mathbf{C}, \mathbf{\theta^{S}}) \P(\mathbf{A^{G}_{j}}\ |\ \mathbf{D^{G}_{j}}, \mathbf{I^{S}_{j}} = k, \mathbf{\Theta^{G}})\\
+		&\P(\mathbf{A^{S}_{j}}\ |\ \mathbf{D^{S}_{j}}, \mathbf{I^{S}_{j}} = k, \mathbf{C^{S}}, \mathbf{\theta^{S}}) = \prod_{i=1}^{N_{S}} \mathrm{Binom}(\mathbf{A^S_{i,j}}\ |\ \mathbf{D^S_{i,j}}, \mathbf{\theta^{S}_{i}})^{\mathbf{C_{i,k}}} \times \mathrm{Binom}(\mathbf{A^S_{i,j}}\ |\ \mathbf{D^S_{i,j}}, \mathbf{\theta^{S}_{0}})^{\mathbf{1-C_{i,k}}} \\ 
+		&\P(\mathbf{A^{G}_{j}}\ |\ \mathbf{D^{G}_{j}}, \mathbf{I^{S}_{j}} = k, \mathbf{\Theta^{G}}) = \prod_{i=1}^{N_{G}} \mathrm{Binom}(\mathbf{A^{G}_{j}}\ |\ \mathbf{D^{G}_{j}}, \mathbf{\Theta^{G}_{i, k}})
+		\end{aligned}
+		\end{equation}
+		
+		\item \textbf{Allelic rate likelihood:} 
+		\begin{equation}
+		\mathcal{L}(\mathbf{\Theta}) = \prod_{j=1}^{M} \sum_{k=1}^{K} \P(\mathbf{A_{j}}\ |\ \mathbf{D_{j}}, \mathbf{I^{S}_{j}} = k, \mathbf{\Theta})\P(\mathbf{I^{S}_{j}} = k\ |\ \mathbf{f}) 
+		\end{equation}
+		To view the clonal assignment in a Bayesian way, we introduce informative prior $ \mathbf{\nu} $ for $\mathbf{\Theta}$.\\ 
+		Using that <<posterior $ \propto $ prior $\times$ likelihood>>, we obtain:
+		\begin{equation}
+		\begin{aligned}
+		&\P(\mathbf{\Theta}\ |\ \mathbf{A}, \mathbf{D}, \mathbf{C}, \mathbf{f}, \mathbf{\nu}) \propto\\
+		&\propto \P(\mathbf{\Theta}\ |\ \mathbf{\nu}) \times \mathcal{L}(\mathbf{\Theta}) =\\
+		&= \left\{\P(\mathbf{\Theta^{G}}\ |\ \mathbf{\nu^{G}}) \times \P(\mathbf{\theta^{S}}\ |\ \mathbf{\nu^{S}})\right\} \times \mathcal{L}(\mathbf{\Theta}) =\\ 
+		&= \left\{\mathrm{Beta}(\mathbf{\theta^{S}_{0}}\ |\ \alpha^{S}_0, \beta^{S}_0) \prod_{i=1}^{N_{S}} \mathrm{Beta}(\mathbf{\theta^{S}_{i}}\ |\ \alpha^{S}_1, \beta^{S}_1) \times \prod_{l=1}^{N_{G}} \prod_{t\in\tau} \mathrm{Beta}(\alpha_{l,\tau}^{G}, \beta_{l,\tau}^{G}) \right\} \times \mathcal{L}(\mathbf{\Theta})
+		\end{aligned}
+		\end{equation}
+		Parameters $\alpha^{G}_{t}, \beta^{G}_{t}$ are selected in such a way that the mode of $\mathrm{Beta}(\alpha^{G}_{t}, \beta^{G}_{t})$ equals to $ 1 / t $ \footnote{because if we assume that allelic rates only depend on the CNV status $ t $ then those rates could be computed as $ 1 / t $. Given that $ \E\  \mathrm{Beta}(\alpha, \beta) = \frac{\alpha}{\alpha + \beta} $, $\alpha = 1,\ \beta = t - 1$ is a feasible solution.}
+		
+		\item \textbf{Cell-to-clone assignment likelihood}:\\
+		The unknown parameters $\Theta$ can be marginalized out:
+		\begin{equation}
+		\P(I_{j} = k\ |\ \mathbf{A_{j}}, \mathbf{D_{j}}, \mathbf{C}, \mathbf{f}) = \int_{\mathbf{\Theta}} \P(I_{j} = k\ |\ \mathbf{A_{j}}, \mathbf{D_{j}}, \mathbf{C}, \mathbf{f}, \mathbf{\Theta}) \P(\mathbf{\Theta}\ |\ \mathbf{A}, \mathbf{D}, \mathbf{C}, \mathbf{f}, \mathbf{\nu})d\mathbf{\Theta}
+		\end{equation}
+		This integral can be evaluated via Monte-Carlo estimation or via analytic computation (maybe).
+	\end{itemize}
+	
+	\subsection{Inference (Gibbs sampler)}
+	To use a Gibbs sampler, we define conditional probability distribution for each scalar random variable:
+	\begin{enumerate}
+		\item \textbf{Cell-to-clone label assignment:} 
+		\begin{equation}
+		\begin{aligned}
+		\P(\mathbf{I^{S}_j} = k\ |\ \mathbf{I^{S}_{-j}}, \mathbf{A}, \mathbf{D}, \mathbf{C}, \mathbf{f}, \mathbf{\Theta}) &= \P(\mathbf{I^{S}_j} = k\ |\ \mathbf{A_{j}}, \mathbf{D_{j}}, \mathbf{C}, \mathbf{f}, \mathbf{\Theta}) \propto\\
+		&\propto \P(\mathbf{I^{S}_{j}} = k\ |\ \mathbf{f}) \P(\mathbf{A_{j}}\ |\ \mathbf{D_{j}}, \mathbf{I^{S}_{j}} = k, \mathbf{C}, \mathbf{\Theta}) =\\
+		\end{aligned}
+		\end{equation}
+		\item \textbf{Allelic rates:}
+		Assuming fixed assignment, let's expand the joint likelihood equation: 
+		\begin{equation}
+		\begin{aligned}
+		&\P(\mathbf{\Theta}\ |\ \mathbf{A}, \mathbf{D}, \mathbf{C}, \mathbf{I^{S}}, \mathbf{f}, \mathbf{\nu}) \propto\\
+		&\propto \left\{\mathrm{Beta}(\mathbf{\theta^{S}_{0}}\ |\ \alpha^{S}_0, \beta^{S}_0) \prod_{i=1}^{N_{S}} \mathrm{Beta}(\mathbf{\theta^{S}_{i}}\ |\ \alpha^{S}_1, \beta^{S}_1) \times \prod_{l=1}^{N_{G}} \prod_{t\in \tau}\mathrm{Beta}(\alpha_{T_{l,t}}^{G}, \beta_{T_{l,t}}^{G}) \right\} \times\\
+		&\times \prod_{j=1}^{M} \left[\P(\mathbf{A^{S}_{j}}\ |\ \mathbf{D^{S}_{j}}, \mathbf{I^{S}_{j}}, \mathbf{C}, \mathbf{\theta^{S}}) \times \P(\mathbf{A^{G}_{j}}\ |\ \mathbf{D^{G}_{j}}, \mathbf{I^{S}_{j}}, \mathbf{\Theta^{G}})\right] =\\
+		&= \left\{\mathrm{Beta}(\mathbf{\theta^{S}_{0}}\ |\ \alpha^{S}_0, \beta^{S}_0) \prod_{i=1}^{N_{S}} \mathrm{Beta}(\mathbf{\theta^{S}_{i}}\ |\ \alpha^{S}_1, \beta^{S}_1) \times \prod_{l=1}^{N_{G}} \prod_{t \in \tau} \mathrm{Beta}(\alpha_{l,t}^{G}, \beta_{l,t}^{G}) \right\} \times\\
+		&\times \prod_{j=1}^{M} \left[\left(
+		\prod_{i=1}^{N_{S}} \mathrm{Binom}(\mathbf{A^S_{i,j}}\ |\ \mathbf{D^S_{i,j}}, \mathbf{\theta^{S}_{i}})^{\mathbf{H^{S}_{i,j}}} \times \mathrm{Binom}(\mathbf{A^S_{i,j}}\ |\ \mathbf{D^S_{i,j}}, \mathbf{\theta^{S}_{0}})^{\mathbf{1-H^{S}_{i,j}}}\right) \times \prod_{l=1}^{N_{G}} \mathrm{Binom}(\mathbf{A^{G}_{l,j}}\ |\ \mathbf{D^{G}_{l,j}}, \mathbf{X^{G}_{l, j}})
+		\right] =\\
+		&= \left[ \mathrm{Beta}(\mathbf{\theta^{S}_{0}}\ |\ \alpha^{S}_0, \beta^{S}_0)  \prod_{j=1}^{M} \prod_{i=1}^{N_{S}} \mathrm{Binom}(\mathbf{A^S_{i,j}}\ |\ \mathbf{D^S_{i,j}}, \mathbf{\theta^{S}_{0}})^{\mathbf{1-H^{S}_{i,j}}} \right] \times\\
+		&\times \prod_{i=1}^{N_{S}} \left[ \mathrm{Beta}(\theta^{S}_{i}\ |\ \alpha^{S}_{1}, \beta^{S}_{1}) \prod_{j=1}^{M} \mathrm{Binom}(\mathbf{A^S_{i,j}}\ |\ \mathbf{D^S_{i,j}}, \mathbf{\theta^{S}_{i}})^{\mathbf{H^{S}_{i,j}}}  \right] \times\\
+		&\times \prod_{l=1}^{N_{G}} \prod_{t \in \tau} \left[ \mathrm{Beta}(\alpha^{G}_{l,t}, \beta^{G}_{l,t}) \prod_{j=1}^{M} \mathrm{Binom}(\mathbf{A^{G}_{l,j}}\ |\ \mathbf{D^{G}_{l,j}}, \mathbf{X^{G}_{l,j}})^{\mathbb{I} \left\{ \mathbf{H^{G}_{l,j}} = t \right\}} \right]
+		\end{aligned}
+		\end{equation}
+		From here we derive update rules for individual allelic rates:
+		\begin{equation}
+		\begin{gathered}
+		\begin{aligned}
+		&\mathbf{\theta^{S}_0}\ |\ \mathbf{I^{S}} \sim \mathrm{Beta}(\alpha^{S}_{0} + u^{S}_{i}, \beta^{S}_{0} + v^{S}_{i}),  
+		&\mathbf{\theta^{S}_i}\ |\ \mathbf{I^{S}} \sim \mathrm{Beta}(\alpha^{S}_{1} + u^{S}_{i}, \beta^{S}_{1} + v^{S}_{i}),\\ 
+		\end{aligned}\\
+		\mathbf{\theta^{G}_{l,t}}\ |\ \mathbf{I^{S}} \sim \mathrm{Beta}(\alpha^{G}_{l,t} + u^{G}_{l,t}, \beta^{G}_{l,t} + v^{G}_{l,t})
+		\end{gathered}
+		\end{equation}
+		where
+		\begin{equation}
+		\begin{aligned}
+		&u^{S}_{0} = \sum_{i=1}^{N_{S}} \sum_{j=1}^{M} \mathbf{A^{S}_{i,j}}(1 - \mathbf{H^{S}_{i,j}}), &v^{S}_{0} = \sum_{i=1}^{N_{S}} \sum_{j=1}^{M} (\mathbf{D^{S}_{i,j}} - \mathbf{A^{S}_{i,j}})(1 - \mathbf{H^{S}_{i, j}}),\\
+		&u^{S}_{i} = \sum_{j=1}^{M} \mathbf{A^{S}_{i,j}}\mathbf{H^{S}_{i,j}},\ i > 0, &v^{S}_{i} = \sum_{j=1}^{M} (\mathbf{D^{S}_{i,j}} - \mathbf{A^{S}_{i,j}})\mathbf{H^{S}_{i,j}},\ i > 0\\
+		&u^{G}_{l,t} = \sum_{j=1}^{M} \mathbf{A^{G}_{l,j}} \cdot \mathbb{I}\left\{ \mathbf{H^{G}_{l,j}} = t \right\} & v^{G}_{l,t} = \sum_{j=1}^{M} (\mathbf{D^{G}_{l,j}} - \mathbf{A^{G}_{l,j}}) \cdot \mathbb{I}\left\{ \mathbf{H^{G}_{l,j}} = t \right\}
+		\end{aligned}
+		\end{equation}
+		\item \textbf{Configuration matrix entries:}
+		\begin{equation}
+		\begin{aligned}
+		&\P(\mathbf{C_{i,k}} = 1\ |\ \mathbf{C_{-i, k}}, \mathbf{A}, \mathbf{D}, \mathbf{I^{S}}, \mathbf{f}, \mathbf{\Theta}, \xi)	=\\
+		&= \dfrac{| \Omega_{i,k} - \xi | \prod_{j=1}^{M} \mathbb{I}(\mathbf{I^{S}_{j}} = k) \cdot \mathrm{Binom}(\mathbf{A^{S}_{i,j}}\ |\ \mathbf{D^{S}_{i,j}}, \mathbf{\theta^{S}_{i}}) }{| \Omega_{i,k} - \xi | \prod_{j=1}^{M} \mathbb{I}(\mathbf{I^{S}_{j}} = k) \cdot \mathrm{Binom}(\mathbf{A^{S}_{i,j}}\ |\ \mathbf{D^{S}_{i,j}}, \mathbf{\theta^{S}_{i}}) + | \Omega_{i,k} - (1 - \xi) | \prod_{j=1}^{M} \mathbb{I}(\mathbf{I^{S}_{j}} = k) \cdot \mathrm{Binom}(\mathbf{A^{S}_{i,j}}\ |\ \mathbf{D^{S}_{i,j}}, \mathbf{\theta^{S}_{0}})}
+		\end{aligned}		
+		\end{equation}
+		\item \textbf{Configuration assignment error rate:}
+		We introduce a prior $\mathrm{Beta}(\kappa_{0}, \kappa_{1})$ for $ \xi $, then:
+		\begin{equation}
+		\P(\xi\ |\ \mathbf{C}, \mathbf{\Omega}, \mathbf{\kappa}) = \mathrm{Beta}\left (\kappa_{0} + \sum_{i,k} \mathbb{I}\{ \mathbf{\Omega_{i,k}} \neq \mathbf{C_{i,k}} \}, \kappa_{1} + \sum_{i,k} \mathbb{I}\{ \mathbf{\Omega_{i,k}} = \mathbf{C_{i,k}} \} \right )
+		\end{equation}
+	\end{enumerate}
+	
+	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+	
+	\section{scDNA + CNV and scRNA, different samples}
+	
+	\begin{figure}[h!]
+		\centering
+		\tikz{ %
+			\node[obs] (T) {$\mathbf{T}$}; %
+			\node[latent, below=of T] (Theta_g) {$\mathbf{\Theta^{G}}$} ; %
+			
+			%% mended by YH
+			% \node[obs, below left=of T] (I_g_prime) {$\mathbf{I^{G'}}$}; %
+			% \node[latent, below right=of T] (I_g) {$\mathbf{I^{G}}$}; %
+			% \node[latent, below right=of I_g] (X_g) {$\mathbf{X^{G}}$}; %
+			% \node[latent, below left=of I_g_prime] (X_g_prime) {$\mathbf{X^{G'}}$}; %
+			\node[obs, left=of T] (I_g_prime) {$\mathbf{I^{G'}}$}; %
+			\node[latent, right=of T] (I_g) {$\mathbf{I^{G}}$}; %
+			\node[latent, left=of Theta_g] (X_g_prime) {$\mathbf{X^{G'}}$}; %
+			\node[latent, right=of Theta_g] (X_g) {$\mathbf{X^{G}}$}; %
+			
+			\node[obs, below=of X_g_prime] (A_g_prime) {$\mathbf{A^{G'}}$}; %
+			\node[obs, left=of A_g_prime] (D_g_prime) {$\mathbf{D^{G'}}$}; %
+			\node[obs, below=of X_g] (A_g) {$\mathbf{A^{G}}$}; %
+			\node[obs, right=of A_g] (D_g) {$\mathbf{D^{G}}$}; %
+			
+			\edge {Theta_g} {X_g}; %
+			\edge {Theta_g} {X_g_prime}; %
+			
+			% \edge {T} {Theta_g};  % turned off by YH
+			\edge {T} {X_g_prime};
+			\edge {T} {X_g};
+			
+			\edge {I_g_prime} {X_g_prime}; %
+			\edge {I_g} {X_g}; %
+			
+			\edge {X_g_prime} {A_g_prime} ; %
+			\edge {D_g_prime} {A_g_prime} ; %
+			
+			\edge {X_g} {A_g} ; %
+			\edge {D_g} {A_g} ; %
+		}
+	\end{figure}
+	
+	\noindent In this model, clonal assignment $ \mathbf{I^{G'}} $ of cells in scDNA sample is assumed fixed. For each clone $ k $, for each same-CNV block $ i $ the clonal CNV state $ \mathbf{T}_{i,k} $ is defined to be the most frequent CNV state in that position across all cells assigned to clone $ k $. Clonal assignment $ \mathbf{I^{G}} $ in scRNA sample is learned.\\
+	
+	\noindent This model learns the clonal structure in scRNA sample using ASE profiles from scDNA.
+	
+	\subsection{Basic definitions}
+	\begin{enumerate}
+		\item \textbf{Constants:}
+		\begin{itemize}
+			\item $ M', M $ — number of cells in scDNA and scRNA samples respectively.
+			\item $ K $  — estimated number of clones in the sample.
+			\item $ N_{G} $ — number of same-CNV blocks in scDNA sample (also used in scRNA sample).
+			\item $ T_{\max} $ — maximal possible CNV number. User-defined with the default of 5.
+			\item $ \tau $ — set of possible CNV configurations: 
+			$$\{\{ (1, 0), (0, 1) \}, \{ (2, 0), (1, 1), (1, 2) \}, \ldots, \{(T_{\max}, 0), \ldots, (0, T_{\max})  \} \}$$ The case of zero CNV number should be treated with care if we can't say for sure whether the part of the chromosome (both arms) is deleted).
+		\end{itemize}
+		\item \textbf{Other known quantities:}
+		\begin{itemize}
+			\item $ \mathbf{D^{G'}}, \mathbf{D^{G}} $ — total read counts. To get a count of the block, one simply adds up the counts of the variants within the block. Here we assume that variants are far enough from each other, so that almost no reads overlap two variants at the same time. Otherwise, adding things up wouldn't make sense.
+			\item $ \mathbf{A^{G'}},\ \mathbf{A^{G}} $ — same for allele-specific counts.
+			\item $ \textbf{f} = (f_1, \ldots, f_K)$ — $K$-dimensional vector of estimated clonal fractions ($ \sum_{i=1}^{K} f_i = 1 $) 
+			\item $ \mathbf{T} $ — CNV states of blocks ($\mathbf{T_{i,k}}$ is a CNV state of a block $ i $ in clone $ k $).
+		\end{itemize}
+		\item \textbf{Inferred quantities:}
+		\begin{itemize}
+			\item $ \mathbf{\Theta^{G}} $ — allelic rates of variants located within blocks of fixed CNV status. $ \mathbf{\Theta^{G}_{i,t}} $ is an allelic rate of a block $i$ with a CNV status $t$. Set of blocks for each clone is unique. Blocks are ordered as tuples of the form (\textit{block start, block length}).
+			\item $ \mathbf{I^{G}} \in [K]^{M} $ — cell-to-clone assignment in scRNA sample.
+		\end{itemize}
+		\item \textbf{Some notational conventions:}
+		\begin{itemize}
+			\item Capitalized letter without superscript (like $ \mathbf{\Theta} $) denotes the information for both samples.
+			\item $ \mathbf{H^{G'}}, \mathbf{H^{G}} $ — CNV status of the blocks in accordance with the current label assignment: 
+			$$ 
+			\mathbf{H^{G'}_{i,j}} := \mathbf{T_{i, I^{G'}_{j}}},\quad \mathbf{H^{G}_{i,j}} := \mathbf{T_{i, I^{G}_{j}}}
+			$$
+			\item  $ \mathbf{X^{G'}},\ \mathbf{X^{G}} $ — a shortcut to simplify the notation: $\mathbf{X^{G'|G}_{i,j}}$ is an allelic rate of a block $ i $ in cell $ j $ based of the current cell-to-clone label assignment.
+			$$ 
+			\mathbf{X^{G'}_{i,j}} := \mathbf{\Theta^{G}_{i, H^{G'}_{i,j}}},\quad \mathbf{X^{G}_{i,j}} := \mathbf{\Theta^{G}_{i, H^{G}_{i,j}}} 
+			$$
+		\end{itemize}
+	\end{enumerate}
+	\subsection{Generative model formulation}
+	\begin{itemize}
+		\item \textbf{Cell-to-clone assignment posterior:}
+		\begin{equation}
+		\P(\mathbf{I^{G}_{j}} = k_{0} \ |\  \mathbf{A_{j}}, \mathbf{D_{j}}, \mathbf{f}, \mathbf{\Theta}) =  
+		\dfrac{\P(\mathbf{A_j} \ |\  \mathbf{D_j}, \mathbf{I^{G}_{j}} = k_{0}, \mathbf{\Theta}) \P(\mathbf{I^{G}_{j}} = k_{0} \ |\  \textbf{f}) }{\sum\limits_{k=1}^{K}\P(\mathbf{A_j} \ |\  \mathbf{D_j}, \mathbf{I^{G}_{j}} = k, \mathbf{\Theta}) \P(\mathbf{I^{G}_{j}} = k\ |\  \textbf{f}) }
+		\end{equation}
+		
+		\item \textbf{ASE model:}
+		\begin{equation}
+		\begin{aligned}
+		\P(\mathbf{A^{G'}_{i,j}}\ |\ \mathbf{D^{G'}_{i,j}}, \mathbf{\Theta^{G}}) &= \mathrm{Binom}(\mathbf{A^{G'}_{i,j}}\ |\ \mathbf{D^{G'}_{i,j}}, \mathbf{X^{G'}_{i,j}})\\
+		\P(\mathbf{A^{G}_{i,j}}\ |\ \mathbf{D^{G}_{i,j}}, \mathbf{\Theta^{G}}) &= \mathrm{Binom}(\mathbf{A^{G}_{i,j}}\ |\ \mathbf{D^{G}_{i,j}}, \mathbf{X^{G}_{i,j}}) 
+		\end{aligned}
+		\end{equation}
+		
+		\item \textbf{ASE likelihood (both terms factorize over variants):}
+		\begin{equation}
+		\begin{aligned}
+		\P(\mathbf{A^{G'}_{j}}\ |\ \mathbf{D^{G'}_{j}}, \mathbf{I^{G'}_{j}} = k', \mathbf{\Theta^{G}}) &= \prod_{i=1}^{N_{G}} \mathrm{Binom}(\mathbf{A^{G'}_{j}}\ |\ \mathbf{D^{G'}_{j}}, \mathbf{\Theta^{G}_{i, k}})\\
+		\P(\mathbf{A^{G}_{j}}\ |\ \mathbf{D^{G}_{j}}, \mathbf{I^{G}_{j}} = k, \mathbf{\Theta^{G}}) &= \prod_{i=1}^{N_{G}} \mathrm{Binom}(\mathbf{A^{G}_{j}}\ |\ \mathbf{D^{G}_{j}}, \mathbf{\Theta^{G}_{i, k}})
+		\end{aligned}
+		\end{equation}
+		
+		\item \textbf{Allelic rate likelihood:} 
+		\begin{equation}
+		\begin{aligned}
+		\mathcal{L}(\mathbf{\Theta}) &= \left (\prod_{j=1}^{M'} \sum_{k'=1}^{K}  \P(\mathbf{A^{G'}_{j}}\ |\ \mathbf{D^{G'}_{j}}, \mathbf{I^{G'}_{j}} = k', \mathbf{\Theta^{G}}) \right ) \times\\
+		&\times \left (\prod_{j=1}^{M} \sum_{k=1}^{K}  \P(\mathbf{A_{j}}\ |\ \mathbf{D_{j}}, \mathbf{I^{G}_{j}} = k, \mathbf{\Theta^{G}}) \cdot \P(\mathbf{I^{G}_{j}} = k\ |\ \mathbf{f}) \right ) 
+		\end{aligned}
+		\end{equation}
+		To view the clonal assignment in a Bayesian way, we introduce informative prior $ \mathbf{\nu} $ for $\mathbf{\Theta}$.\\ 
+		Using that <<posterior $ \propto $ prior $\times$ likelihood>>, we obtain:
+		\begin{equation}
+		\begin{aligned}
+		&\P(\mathbf{\Theta^{G}}\ |\ \mathbf{A}, \mathbf{D}, \mathbf{f}, \mathbf{\nu}) \propto \P(\mathbf{\Theta}\ |\ \mathbf{\nu}) \times \mathcal{L}(\mathbf{\Theta}) =\\
+		&= \prod_{l=1}^{N_{G}} \prod_{t\in\tau} \mathrm{Beta}(\alpha_{l,\tau}^{G}, \beta_{l,\tau}^{G}) \times \mathcal{L}(\mathbf{\Theta})
+		\end{aligned}
+		\end{equation}
+		Parameters $\alpha^{G}_{t}, \beta^{G}_{t}$ are selected in such a way that the mode of $\mathrm{Beta}(\alpha^{G}_{t}, \beta^{G}_{t})$ equals to $ 1 / t $ \footnote{because if we assume that allelic rates only depend on the CNV status $ t $ then those rates could be computed as $ 1 / t $}.
+	\end{itemize}
+	\subsection{Selecting a prior for $\mathbf{\Theta^G}$}
+	CNV state of $t$ hides a plethora of possible configurations: it can mean "$ k $ copies of maternal chromosome and $ t - k $ copies of paternal" for any $ k \in \{0, \ldots, t\} $, all the variants are possible. But they are not equally possible: some are more supported by evidence than the rest. During initialization, for each block in each clone we should find the $ (k, t) $-configuration $ (k_0, t) $, such that $ k_0 / t $ is as close to the observed ASE ratio as possible. Then we choose values $ (\alpha, \beta) $ such that the mode of $ \mathrm{Beta}(\alpha, \beta) $, given by $ (\alpha - 1) / (\alpha + \beta - 2) $, equals to $ k_0 / t $. That means, we must solve the following problem:
+	$$
+	\dfrac{\alpha - 1}{\alpha + \beta - 2} = \frac{k_0}{t},\ \alpha \ge 1,\ \beta \ge 1
+	$$
+	Let's derive the solution. If $ k_0 = 0 $, it is clear that $ \alpha = 1 $, while any $ \beta > 1 $ works\footnote{Nevertheless, it is not clear which one to choose. As we try to reduce prior bias, let's set it to be equal $ 1 + \eps $  for some reasonable $ \eps > 0 $}. Otherwise:
+	\begin{equation}
+	\begin{aligned}
+	(\alpha - 1) t &= (\alpha + \beta - 2) k_0\\
+	k_0 \beta &= (t - k_0) \alpha -t + 2 k_0\\
+	\beta &= \left (\frac{t}{k_0} - 1\right ) \alpha - \left (\frac{t}{k_0} - 2 \right )\\
+	&\implies \alpha = 1 + \frac{t - 2k_0}{t - k_0},\ \beta = 1
+	\end{aligned}
+	\end{equation}
+	As $ \beta $ is linearly dependent from $ \alpha $, any increase in $ \alpha $ will pull $ \beta $ up, "sharpening" the shape of the distribution and making it more biased, thereby we decided to choose the minimal feasible $ \alpha $.
+	\subsection{Inference (Gibbs sampler)}
+	To use a Gibbs sampler, we define conditional probability distribution for each scalar random variable:
+	\begin{enumerate}
+		\item \textbf{Cell-to-clone label assignment:} 
+		\begin{equation}
+		\begin{aligned}
+		\P(\mathbf{I^{G}_j} = k\ |\ \mathbf{I^{G}_{-j}}, \mathbf{A^{G}}, \mathbf{D^{G}}, \mathbf{f}, \mathbf{\Theta^{G}}) 
+		&\propto \P(\mathbf{A^{G}_{j}}\ |\ \mathbf{D^{G}_{j}}, \mathbf{I^{G}_{j}} = k, \mathbf{\Theta}^{G}) \cdot \P(\mathbf{I^{G}_{j}} = k\ |\ \mathbf{f}) 
+		\end{aligned}
+		\end{equation}
+		\item \textbf{Allelic rates:}
+		Assuming fixed assignment, let's expand the joint likelihood equation: 
+		\begin{equation}
+		\begin{aligned}
+		&\P(\mathbf{\Theta}\ |\ \mathbf{A}, \mathbf{D}, \mathbf{I^{G'}}, \mathbf{I^{G}}, \mathbf{f}, \mathbf{\nu}) \propto\\
+		&\propto \left\{\prod_{l=1}^{N_{G}} \prod_{t\in \tau}\mathrm{Beta}(\alpha_{T_{l,t}}^{G}, \beta_{T_{l,t}}^{G}) \right\} 
+		\times \left[ \prod_{j=1}^{M'} \P(\mathbf{A^{G'}_{j}}\ |\ \mathbf{D^{G'}_{j}}, \mathbf{I^{G'}_{j}}, \mathbf{\Theta^{G}}) \right] 
+		\times \left[\prod_{j=1}^{M} \P(\mathbf{A^{G}_{j}}\ |\ \mathbf{D^{G}_{j}}, \mathbf{I^{G}_{j}}, \mathbf{\Theta^{G}}) \right]  =\\
+		&= \left\{\prod_{l=1}^{N_{G}} \prod_{t\in \tau}\mathrm{Beta}(\alpha_{T_{l,t}}^{G}, \beta_{T_{l,t}}^{G}) \right\} 
+		\times \left[ \prod_{j=1}^{M'} \prod_{i=1}^{N_{G}} \mathrm{Binom}(\mathbf{A^{G'}_{j}}\ |\ \mathbf{D^{G'}_{j}}, \mathbf{\Theta^{G}_{i, k}}) \right] 
+		\times \left[\prod_{j=1}^{M} \prod_{i=1}^{N_{G}} \mathrm{Binom}(\mathbf{A^{G}_{j}}\ |\ \mathbf{D^{G}_{j}}, \mathbf{\Theta^{G}_{i, k}}) \right]  =\\
+		&= \prod_{l=1}^{N_{G}} \prod_{t \in \tau} \left[ \mathrm{Beta}(\alpha^{G}_{l,t}, \beta^{G}_{l,t}) \prod_{j'=1}^{M'}\prod_{j=1}^{M} \mathrm{Binom}(\mathbf{A^{G'}_{l,j'}}\ |\ \mathbf{D^{G'}_{l,j'}}, \mathbf{X^{G'}_{l,j'}})^{\mathbb{I} \left\{ \mathbf{H^{G'}_{l,j'}} = t \right\}} \mathrm{Binom}(\mathbf{A^{G}_{l,j}}\ |\ \mathbf{D^{G}_{l,j}}, \mathbf{X^{G}_{l,j}})^{\mathbb{I} \left\{ \mathbf{H^{G}_{l,j}} = t \right\}} \right]
+		\end{aligned}
+		\end{equation}
+		From here we derive update rules for individual allelic rates:
+		\begin{equation}
+		\mathbf{\Theta^{G}_{l,t}}\ |\ \mathbf{I^{G'}}, \mathbf{I^{G}} \sim \mathrm{Beta}(\alpha^{G}_{l,t} + u^{G}_{l,t}, \beta^{G}_{l,t} + v^{G}_{l,t})
+		\end{equation}
+		where
+		\begin{equation}
+		\begin{aligned}
+		&u^{G}_{l,t} = \sum_{j'=1}^{M'} \mathbf{A^{G'}_{l,j'}} \cdot \mathbb{I}\left\{ \mathbf{H^{G'}_{l,j'}} = t \right\} +   \sum_{j=1}^{M} \mathbf{A^{G}_{l,j}} \cdot \mathbb{I}\left\{ \mathbf{H^{G}_{l,j}} = t \right\}\\
+		& v^{G}_{l,t} =\sum_{j'=1}^{M'} (\mathbf{D^{G'}_{l,j'}} - \mathbf{A^{G'}_{l,j'}}) \cdot \mathbb{I}\left\{ \mathbf{H^{G'}_{l,j'}} = t \right\} + \sum_{j=1}^{M} (\mathbf{D^{G}_{l,j}} - \mathbf{A^{G}_{l,j}}) \cdot \mathbb{I}\left\{ \mathbf{H^{G}_{l,j}} = t \right\}
+		\end{aligned}
+		\end{equation}
+	\end{enumerate}
+	
+	
+	
+	
+	\section{Notes}
+	\begin{figure}[h!]
+		\centering
+		\tikz{ %
+			\node[obs] (T) {$\mathbf{T}$}; %
+			\node[latent, below=of T] (Theta_g) {$\mathbf{\Theta}$} ; %
+			
+			%% mended by YH
+			% \node[obs, below left=of T] (I_g_prime) {$\mathbf{I^{G'}}$}; %
+			% \node[latent, below right=of T] (I_g) {$\mathbf{I^{G}}$}; %
+			% \node[latent, below right=of I_g] (X_g) {$\mathbf{X^{G}}$}; %
+			% \node[latent, below left=of I_g_prime] (X_g_prime) {$\mathbf{X^{G'}}$}; %
+			\node[obs, left=of T] (I_g_prime) {$\mathbf{I^{G}}$}; %
+			\node[latent, right=of T] (I_g) {$\mathbf{I^{E}}$}; %
+			\node[latent, left=of Theta_g] (X_g_prime) {$\mathbf{X^{G}}$}; %
+			\node[latent, right=of Theta_g] (X_g) {$\mathbf{X^{E}}$}; %
+			
+			\node[obs, below=of X_g_prime] (A_g_prime) {$\mathbf{A^{G}}$}; %
+			\node[obs, left=of A_g_prime] (D_g_prime) {$\mathbf{D^{G}}$}; %
+			\node[obs, below=of X_g] (A_g) {$\mathbf{A^{E}}$}; %
+			\node[obs, right=of A_g] (D_g) {$\mathbf{D^{E}}$}; %
+			
+			\edge {Theta_g} {X_g}; %
+			\edge {Theta_g} {X_g_prime}; %
+			
+			% \edge {T} {Theta_g};  % turned off by YH
+			\edge {T} {X_g_prime};
+			\edge {T} {X_g};
+			
+			\edge {I_g_prime} {X_g_prime}; %
+			\edge {I_g} {X_g}; %
+			
+			\edge {X_g_prime} {A_g_prime} ; %
+			\edge {D_g_prime} {A_g_prime} ; %
+			
+			\edge {X_g} {A_g} ; %
+			\edge {D_g} {A_g} ; %
+		}
+	\end{figure}
+	
+	
+	
+	\begin{figure}[h!]
+		\centering
+		\tikz{ %
+			\node[obs] (nu) {${\nu_{l}}$}; %
+			\node[latent, below=of nu] (Theta) {${\theta_{il}}$}; %
+			\node[latent, fill=blue!20, left =of nu, xshift=-0.5cm] (I_G) {${I_{j}^G}$}; %
+			\node[latent, right=of nu, xshift=0.5cm] (I_E) {${I_{h}^E}$}; %
+			
+			\node[latent, rectangle, below=of I_G] (P_G) {${p_{ij}^G}$} ; %
+			\node[latent, rectangle, below=of I_E] (P_E) {${p_{ih}^E}$} ; %
+			
+			\node[latent, fill=blue!20, below=of Theta] (T) {${t_{ik}}$} ; %
+			\node[obs, below=of P_G] (A_G) {${a_{ij}^G}$} ; %
+			\node[obs, below=of P_E] (A_E) {${a_{ih}^E}$} ; %
+			\node[obs, left=of A_G] (D_G) {${d_{ij}^G}$} ; %
+			\node[obs, right=of A_E] (D_E) {${d_{ih}^E}$} ; %
+			
+			\edge {nu} {Theta} ; %
+			\edge {I_G} {P_G} ; %
+			\edge {I_E} {P_E} ; %
+			\edge {Theta} {P_G} ; %
+			\edge {T} {P_G} ; %
+			\edge {Theta} {P_E} ; %
+			\edge {T} {P_E} ; %
+			\edge {P_G} {A_G} ; %
+			\edge {D_G} {A_G} ; %
+			\edge {P_E} {A_E} ; %
+			\edge {D_E} {A_E} ; %
+			
+			
+			{\tikzset{plate caption/.append style={below=5pt of #1.south east}};
+				\plate[inner xsep=0.8cm, inner ysep=0.4cm, xshift=-0.6cm, yshift=0cm] {plate1} {(D_G) (A_G)(P_G)(D_E) (A_E)(P_E)} {CNV-haplo block $i$} };
+			
+			{\tikzset{plate caption/.append style={below=30pt of #1.south}};
+				\plate[inner xsep=0.4cm, inner ysep=0.4cm, xshift=0.1cm, yshift=0.28cm, color=black] {plate1} {(D_G) (A_G)(P_G)(I_G)} {cell $j$ in scDNA} };
+			{\tikzset{plate caption/.append style={below=30pt of #1.south}};
+				\plate[inner xsep=0.4cm, inner ysep=0.4cm,  xshift=-0.1cm, yshift=0.28cm, color=black] {plate2} {(D_E) (A_E)(P_E)(I_E)} {cell $h$  in scRNA} };
+			
+			{\tikzset{plate caption/.append style={above=2pt of #1.north}};
+				\plate[inner sep=0.25cm, xshift=0cm, yshift=0.12cm] {plate3} {(nu) (Theta)} {CNV $l$} };
+			
+			{\tikzset{plate caption/.append style={below=30pt of #1.south}};
+				\plate[inner xsep=0.25cm, inner ysep=0.4cm,  xshift=0cm, yshift=0.2cm] {plate4} {(T)} {clone $k$} };
+			%	
+			
+			
+		}
+	\end{figure}
+	
+	
+	\begin{equation*}
+	p_{i,j} = \theta_{i,l_j}; l_j=t_{i,{I_j}}
+	\end{equation*}
+	
+	\begin{equation*}
+	P(a_{i,j}|d_{i,j}, p_{i,j})= \text{Binom}(a_{i,j}; d_{i,j}, p_{i,j})
+	\end{equation*}
+	
+	
+\end{document} 
