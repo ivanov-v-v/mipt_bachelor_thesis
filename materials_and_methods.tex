@@ -2,7 +2,7 @@
 
 \section{Материалы и методы}
 
-\subsection{Вероятностная модель числа прочтений}
+\subsection{Вероятностная модель числа прочтений}\label{dna_seq_probabilistic_model}
 При работе с данными секвенирования часто возникает задача оценить матожидание числа прочтений по заданному участку генома. В случае DNA-seq, эта величина описывается простой вероятностной моделью
 
 \begin{figure}[H]
@@ -79,7 +79,7 @@
 
 Тем не менее, такой подход оказался хорош лишь в теории. На практике, найденные таким способом гаплотипические блоки оказывались слишком короткими, порядка нескольких килобаз. Кроме того, распределение их длин имело достаточно большую дисперсию, что доставляло неудобства как при реализации, так и при интерпретации результатов: чем меньше сегмент, тем более зашумленный от него исходит сигнал. Когда таких сегментов много, модель переобучалась на шум в них, что приводило к неадекватному предсказанию меток классов. 
 
-\subsubsection{Исправление ошибок смены цепи}
+\subsubsection{Исправление ошибок смены цепи}\label{bin_linkage_em}
 Поскольку одной из главных задач XClone является предсказание \textit{аллель-специфичных} структурных вариаций в геноме, матрицы $\mathrm{AD}$ и $\mathrm{DP}$ аллель-специфичных прочтений должны отражать биологию аллельного дисбаланса в клетках образца. Для этого нужно понимать, к какому гаплотипу принадлежит каждый ОНП. В разделе про статистическое гаплотипирование ОНП был сделан акцент на том, что существующие алгоритмы гарантируют только локальную корректность: при использовании алгоритма EAGLE2, следует ожидать, что при разбиении хромосомы на непересекающиеся окна длины 20-50 килобаз все гетерозиготные ОНП в пределах одного окна будут иметь одинаковый гаплотип, если это на самом деле так. Тем не менее, гаплотипы соседних сегментов с точки зрения алгоритма могут не совпадать даже тогда, когда на самом деле должны. К этому приводят так называемые \textbf{ошибки смены цепи} (\textit{switching error}) — спонтанная и неявная замена гаплотипических меток на противоположные внутри алгоритма. Классификацию ошибок смены цепи можно найти в статье \cite{Choi2018Plos}, цитата из которой приведена ниже:
 
 \textit{"Phasing accuracy is typically measured by counting the number of \textbf{‘switches’} between known maternal and paternal haplotypes that should not occur if individual maternal and paternal chromosomal nucleotide sequence content has been accurately characterized. If an inconsistency is identified, then it is called a ‘switch error.’ These switch errors manifest themselves as induced and false recombination events in the inferred haplotypes compared with the true haplotypes. To identify \textbf{switch errors}, the phase of each site is compared with upstream neighboring phased sites. The switch error rate (SER) is defined as the number of switch errors divided by the number of opportunities for switch errors. Switch errors were further classified into three categories: \textbf{long}, \textbf{point}, and \textbf{undetermined}. A long switch appears as a large-scale pseudo recombination event; that is, there are no other switches in the local neighborhood around the long switch (e.g., no other switches within three consecutive heterozygous sites). On the contrary, a small-scale switch error appearing as two neighboring switch errors is considered as a point switch (e.g., two switches within three consecutive heterozygous sites, with the pair of switches counted as a point switch). The remaining switches are considered undetermined (e.g., only two sites phased in a small phasing block, so the switch error could not be classified into long or point)."}
@@ -402,86 +402,218 @@ $$
 	\caption{Иллюстрация сведения задачи восстановления наиболее вероятной перестановки меток классов к поиску совершенного паросочетания минимального веса в двудольном графе. Веса — расстояния между столбцами матриц $\bm{P}$ и $\bm{Q}$, матриц предсказанных и истинных вероятностей клональных меток.} 
 \end{figure}
 
-\subsection{Заключительная версия XClone: ASE- и RDR-модули}
-\subsubsection{Вариационный байесовский вывод}
-\subsubsection{Структура ASE-модуля}
-In the xclone model, we aim to cluster cells in scRNA-seq data by its copy number variation (CNV) states across many CNV blocks. The similarity between two CNV states are measured at both allelic fraction and expression count levels, which reflects both the maternal and paternal copy numbers $c_t = [c_{t,1}, c_{t,2}]$ for CNV state $t$. The key novelty of xclone is that it allows to integrate additional information on CNV states and the according parameters of allelic fraction and expression count, for example extracting from scDNA-seq data.
+\subsection{Заключительная версия XClone: BAF- и RDR-модули}
+Текущая версия алгоритма XClone использует BAF и RDR для того, чтобы восстановить клональную структуру опухоли и определить профили ASCNV для каждого клона. Она лишена сразу нескольких недостатков прошлой версии:
+\begin{itemize}
+	\item не зависит от внешних алгоритмов детектирования CNV по данным single-cell секвенирования;
+	\item для поиска оценки апостериорного максимума вместо медленного семплирования по Гиббсу используется эффективно автоматизированный вариационный байесовский вывод на GPU;
+\end{itemize}
+От пользователя требуется только предоставить BAM-файлы образцов и набор геномных позиций, использованных при секвенировании. Вся предобработка данных и дальнейшее обучение модели релизовано в виде отдельных скриптов с консольным интерфейсом, для использования которых достаточно задать пути к данным. 
 
-Due to different magnitudes of expressions and allelic bias across genes even with the same CNV block,  we define the model at per gene basis. If a CNV block contains multiple genes, we will introduce separate functions to link CNV states for these neighbouring genes.
+Сам алгоритм принимает на вход три матрицы:
+\begin{itemize}
+	\item $\bm{RD}$ — матрица прочтений;
+	\item $\bm{DP}$ — матрица прочтений, которые выравниваются на последовательности, содержащие хотя бы один ОНП;
+	\item $\bm{AD}$ — матрица тех прочтений из $\bm{DP}$, которые выравниваются на материнский аллель;
+\end{itemize}
 
-As most scRNA-seq data has very low coverage, especially for the droplet based protocols, it is hard to accurately estimate the allelic fraction from expression for most individual heterozygous variants. Therefore, we aggregate multiple variants across one gene by using statistical phasing with haplotype reference. This may increase the power of allelic fraction estimation, though we need to avoid multiple counting when one read covering several nearby SNPs. Once again, multiple genes within one CNV block could be further aggregated, through a separate linkage function.
+Все три матрицы принадлежат $\N^{N \times M}$, где $N$ это число блоков после предобработки из раздела \ref{bin_linkage_em}, а $M$ — число клеток образца. Все три матрицы должны быть подсчитаны по данным scDNA-seq.
 
+Также на вход алгоритма подаётся $K$  — ожидаемое число клональных линий в образце — и $\tau$, набор допустимых ASCNV $ \{c_{t}\}_{t=1}^{T} $, где $ c_{t} := (c_{t,m}, c_{t,p})$, где $c_{t,m}$ — число копий на материнской хромосоме, а $ с_{t, p} $ — соответственно, на отцовской. По умолчанию для $\tau$ содержит следующие 16 состояний:
+\begin{align*}
+	(&[0,0], [0,1], [0,2], [0,3],\\
+	&[1,0], [1,1], [1,2], [1,3],\\ 
+	&[2,0], [2,1], [2,2], [2,3],\\
+	&[3,0], [3,1], [3,2], [3,3])
+\end{align*}
+BAF- и RDR-модули связаны скрытыми переменными $\bm{Z}, \bm{Y}$:
+\begin{itemize}
+	\item $z_{j,k} := I\{ \text{клетка } j \text{ принадлежит клональной линии } k \}$;
+	\item $y_{i,k,t} := I\{ \text{блок } i \text{ в клональной линии } k \text{ находится в состоянии } c_{t} \} $;
+\end{itemize}
 
-\textbf{Allelic fraction module}
-By aggregating multiple SNPs for each gene, we could have observations on $N$ genes across $M$ cells in scRNA-seq data. For gene $i$ in cell $j$, we denote the read (or UMI) count for alternative allele as $a_{i,j}$ and the total depth (i.e., for both alternative and reference alleles) as $d_{i,j}$. Assuming there are $T$ CNV states and for each state $t$ the maternal and paternal copy number vector $c_t=[c_{t,1}, c_{t,2}]$. If gene $i$ in cell $j$ is in CNV state $t$, we assume the allelic expression follows a binomial distribution with CNV state specific parameter $\theta_t$, as follows,
-\begin{equation}
-	p(a_{i,j}|d_{i,j}, \theta_t) = \mathtt{Binom}(a_{i,j}|d_{i,j}, \theta_{i,t}).
-	\label{Eq:ASE-base}
-\end{equation}
+на которых заданы априорные вероятности $\bm{\pi}, \bm{U}$:
 
-Let $A$ and $D$ respectively denote the gene-by-cell count matrices for the alternative allele and the total read depths, and each cell comes from one of the $K$ clones. If cell $j$ is from clone $k$, the cell identity variable $z_{j,k}=1$ otherwise 0. Also, if gene $i$ in clone $k$ is in CNV state $t$, the corresponding CNV state variable $y_{i,k,t}=1$ otherwise 0. Their according matrix or tensor $Z$ and $Y$ are unknown variables. Now, we could define the likelihood for allelic fraction as follows, TODO
-\begin{equation}
-	p(A, D | Z, Y, \bm\theta)  = \prod_{i=1}^{N} \prod_{j=1}^{M} \prod_{k=1}^{K}\prod_{t=1}^{T} p(a_{i,j}|d_{i,j}, \theta_{i,t}) ^{z_{j,k} \times y_{i,k,t}}
-	\label{Eq:ASE-lik}
-\end{equation}
-
-Here, we introduce uniform $\mathtt{Multinomial}$ distribution for $Z$ and $Y$ and $\mathtt{Beta}$ distribution for $\bm\theta$ with default hyper-parameters $\alpha_t = (c_{t,1} + 0.01)$ and $\beta_t = (c_{t,2} + 0.01)$ as follows,
 \begin{equation}
 	\begin{split}
-		p(z_{j,k} = 1|\bm\pi) & = \mathtt{Multinom}(1; \bm\pi_{j}) = \pi_{j,k} \\
-		p(y_{i,k,t} = 1|U) & = \mathtt{Multinom}(1; \bm{u}_{i,k}) = u_{i,k,t} \\
-		p(\theta_{i,t} | \alpha_t, \beta_t) & = \mathtt{Beta} (\theta_{i,t}| \alpha_t, \beta_t)
+		p(z_{j,k} = 1\ |\ \bm{\pi}) & = \mathtt{Multinom}(1; \bm\pi_{j}) = \pi_{j,k} \\
+		p(y_{i,k,t} = 1\ |\ \bm{U}) & = \mathtt{Multinom}(1; \bm{u}_{i,k}) = u_{i,k,t} 
 	\end{split}
-\label{Eq:prior-ASE}
+	\label{Eq:xclone_vb_shared_priors}
 \end{equation}
 
-For a start point, we only consider $T=16$ CNV states: \\
-$\{[0,0], [0,1], [0,2], [0,3], [1,0], [1,1], [1,2], [1,3], [2,0], [2,1], [2,2], [2,3], [3,0], [3,1], [3,2], [3,3]\}$
+\subsubsection{Структура BAF-модуля}
+Если блок $i$ в клетке $j$ находится в состоянии $c_{t}$, то $a_{i,j}$ подчиняется биномиальной модели с параметром $\theta_{i,t} \sim \mathrm{Beta}(\alpha_t, \beta_t)$, где $\alpha_t, \beta_t$ — параметры априорного распределения. Они одни и те же для всех блоков в состоянии $c_{t}$ и полагаются равными $\alpha_t = (c_{t,1} + 0.01)$ и $\beta_t = (c_{t,2} + 0.01)$. В формульной записи:
 
-\textbf{Expression count module}
-For a particular cell $j$, we assume that the expression counts for $N$ genes follows a $\mathtt{Multinomial}$ distribution with total counts as $d_j=\sum_{i=1}^N d_{i,j}$ and probability vector as $\bm f_j=\{f_{1,j},...,f_{N,j}\}$, hence $\sum_{i=1}^{N} f_{i,j} = 1$. In the case of diploid genome, $f_{i,j}=m_i$.
+\begin{equation}
+	p(a_{i,j}\ |\ d_{i,j}, \theta_{i, t}) = \mathtt{Binom}(a_{i,j}\ |\ d_{i,j}, \theta_{i,t}).
+	\label{Eq:xclone_vb_ase_base}
+\end{equation}
 
-When CNVs exist in the consensual genome for clone $k$, the amplification factor $\bm \gamma$ needs to take into account, and the probability to observe the read counts for $N$ genes can be expressed as 
+где $a_{i, j}, d_{i, j}$ — элементы матриц $\bm{AD}, \bm{DP}$ на позиции $(i, j)$. В предположении, что числа прочтений в соседних блоках независимы, функция правдоподобия записывается следующим образом:
+
+\begin{equation}
+	p(A, D | Z, Y, \bm\theta)  = \prod_{i=1}^{N} \prod_{j=1}^{M} \prod_{k=1}^{K}\prod_{t=1}^{T} p(a_{i,j}\ |\ d_{i,j}, \theta_{i,t}) ^{z_{j,k} \times y_{i,k,t}}
+	\label{Eq:xclone_vb_ase_lik}
+\end{equation}
+
+\subsubsection{Структура RDR-модуля}
+Для каждой клональной линии $k$ модель числа прочтений задаётся мультиномиальным распределением. Каждому блоку $i$ в этой модели назначается вероятность $f_{i,k}$. Она задаётся формулой
 \begin{equation}
 	\begin{aligned}
-		\bm d_{j} &:= [d_{1, j}, \ldots, d_{N, j}]\\
-		p(\bm d_{j} | d_{j}, \bm f_{j}) &:= \mathtt{Multinom}(\bm d_{j} | d_j, \bm f_{k});\\
 		f_{i,k} &:= \dfrac{\sum_{t=1}^{T} m_i \exp[\gamma_t] P(y_{i,k,t}=1)}{\sum_{b=1}^{N}\sum_{t=1}^{T} m_b \exp[\gamma_t] P(y_{b,k,t}=1)}
 	\end{aligned}
-\label{Eq:RDR-base}
+\label{Eq:xclone_vb_rdr_multinomial_def}
+\end{equation}
+Где $m_{i}$ — доля прочтений, попадающих в блок $i$ в здоровой клетке при стремлении глубины покрытия к бесконечности (или какая-то оценка этой величины), $\exp\{\gamma_t\}$ — амплификация, вызванная наличием $c_{t,m} + c_{t,p}$ копий блока в геноме (здесь возведение в степень нужно для того, чтобы гарантировать неотрицательность). Эта модель согласуется с теорией для данных scDNA-seq, т.к. после коррекции технических факторов для ДНК-секвенирования правомерны предположения о том, что прочтения распределяются по геному равномерно, а систематические отклонения от этого правила могут быть вызваны только loss- или gain-событиями (см. модель ДНК-секвенирования из раздела \ref{dna_seq_probabilistic_model}). 
+
+Тогда функция правдоподобия запишется как
+\begin{equation}
+	\begin{aligned}
+		\bm r_{j} &:= (r_{1, j}, \ldots, r_{N, j})\\
+		p(\bm r_{j}\ | \bm f_{k}) &:= \mathtt{Multinom}\left (\bm r_{j}\ \middle|\ \sum_{i=1}^{N} r_{i,j}, \bm f_{k}\right )\\
+		p(RD\ |\ Z, Y, \bm m, \bm\gamma)  & := \prod_{j=1}^{M} \prod_{k=1}^{K} p\left (\bm r_{j}\ \middle|\ \sum_{i=1}^{N} r_{i,j}, \bm f_{k}\right ) ^{z_{j,k}}
+	\end{aligned}
+	\label{Eq:xclone_vb_rdr_lik}
 \end{equation}
 
-As can be seen that the diploid expression profile $\bm m$ is shared by all cells, the likelihood for $M$ cells jointly can be written as follows,
-\begin{equation}
-\begin{aligned}
-p(D | Z, Y, \bm m, \bm\gamma)  & := \prod_{j=1}^{M} \prod_{k=1}^{K} p(\bm d_{j} | d_{j}, \bm f_{k}) ^{z_{j,k}}
-\end{aligned}
-\label{Eq:RDR-lik}
-\end{equation}
-Here, we introduce $\mathtt{Dirichlet}(\bm\omega)$ as the prior distribution for $\bm m$, and Gaussian process $\mathtt{GP}(\bm\mu, \Sigma)$ as the prior distribution for $\bm \gamma$. The GP prior has fixed hyper-parameters $\mu_t = \log((c_{t,1} + c_{t,2}) / 2 + \varepsilon)$ for CNV state $t$, where $\varepsilon$ is some reasonably small offset, and the covariance matrix $\Sigma$ is defined by the radial basis function kernel $K(\bm c_t, \bm c_{t\prime})=l_1 \exp\{-l_2[(c_{t,1}-c_{t\prime,1})^2 + (c_{t,2}-c_{t\prime,2})^2]\}$, as follows,
+Если $\bm{m}$ заранее неизвестно, то его можно смоделировать посредством задания априорного распределения $\mathtt{Dirichlet}(\bm\omega)$. Аналогично для $\mathbf{\gamma}$ в качестве априорного распределения задаётся $\mathtt{GP}(\bm\mu, \bm\Sigma)$, где под $\mathtt{GP}$ подразумевается дискретный гауссовский процесс с $\mu_t := \log((c_{t,1} + c_{t,2}) / 2 + \varepsilon)$ для достаточного малого положительного $\varepsilon$, а матрица ковариаций $\bm\Sigma$ задаётся RBF-ядром $K(\bm c_t, \bm c_{t\prime}) := l_1 \exp\{-l_2[(c_{t,1}-c_{t\prime,1})^2 + (c_{t,2}-c_{t\prime,2})^2]\}$, где $l_1,\ l_2$ — гиперпараметры модели. В формульной записи:
 \begin{equation}
 	\begin{split}
-		\bm m|\bm \omega &\sim \mathtt{Dirichlet}( \bm\omega)\\
-		\bm \gamma | \bm\mu, \Sigma &\sim \mathtt{ \mathcal{N}}(\bm\mu, \Sigma) \\
+		\bm m\ |\ \bm \omega &\sim \mathtt{Dirichlet}( \bm\omega)\\
+		\bm \gamma\ |\ \bm\mu, \Sigma &\sim \mathtt{\mathtt{GP}}(\bm\mu, \bm\Sigma) \\
 	\end{split}
-\label{Eq:prior-RDR}
+	\label{Eq:xclone_vb_rdr_priors}
 \end{equation}
 
-\textbf{Posterior and inference}
-Now, by combining the allelic fraction and expression count likelihoods and their specific prior distributions, we could have the posterior distribution as follows,
+\subsubsection{Вариационный байесовский вывод}
+Пусть $\bm{X} = (X_1, \ldots, X_n)$ — выборка из распределения с плотностью $p_{\theta}(\bm{X})$ ($p_{\theta}(\bm{X}) = \prod_{i=1}^{n} p_{\theta}(X_i)$), где $\theta$ — набор параметров распределения. Пусть $q$ — априорное распределение на $\Theta$ — множестве допустимых параметров. Тогда $f(\theta, \bm{X}) := p_{\theta}(\bm{X}) q(\theta)$ — плотность совместного распределения на $\Theta \times \mathcal{X}$. Тогда апостериорная плотность на параметрах выражается как
+$$
+	q(\theta\ |\ \bm{X}) := \frac{f(\theta, \bm{X})}{p(\bm{X})} = \frac{f(\theta, \bm{X})}{\int_{\Theta} f(t, \bm{X}) dt }  = \frac{f(\theta, \bm{X})}{\int_{\Theta} p_{t}(\bm{X}) q(t) dt } 
+$$
+Величину $p(\bm{X})$ в знаменателе называют \textbf{обоснованностью}. В общем случае она не выражается в аналитических функциях. 
+
+Пусть стоит задача найти оценку апостериорного максимума (ОАМ) — $\arg\max\limits_{\Theta} q(\theta\ |\ \bm{X})$, — а также распределение на всех параметрах из $\theta$. В силу того, обоснованность $p(\bm{X})$ это константа, можно максимизировать не $q(\theta \|\ \bm{X})$, а $f(\theta, \bm{X})$. Но совместная плотность как функция может быть устроена произвольно сложно. Уже при счётном $\Theta$ поиск её максимума это нетривиальная задача. Тем не менее, задача поиска ОАМ допускает альтернативную формулировку в форме задачи непрерывной оптимизации.
+
+\begin{definition}[\textit{KL-дивергенция}]
+	Пусть $p, q$ — плотности распределений $P, Q$ над одним вероятностным пространством $(\Omega, \mathcal{F}, \P)$. Тогда KL-дивергенцией $KL(P\ \|\ Q)$ называют величину $ \int_{\Omega} p(x) \log \frac{p(x)}{q(x)} dx $.
+\end{definition}
+
+\begin{claim}
+	Пусть $\mathbb{F}_{\mathcal{X}}$ — пространство абсолютно непрерывных распределений над вероятностным пространством $\mathcal{X} = (\Omega, \mathcal{F}, \P)$, тогда
+	\begin{enumerate}
+		\item $\forall P, Q \in \mathbb{F}_{\mathcal{X}}: KL(P\ \|\ Q) \ge 0$, причём $KL(P\ \|\ Q) = 0 \iff P \overset{\text{п.вс.}}{=} Q$.
+		\item $\forall P_1, P2, Q \in \mathbb{F}_{\mathcal{X}}: KL(P_1\ \|\ P_2) \le  KL(P_1\ \|\ Q) + KL(Q\ \|\ P_2)$
+	\end{enumerate}
+	Кроме того, для произвольного $\mathcal{X}$ могут найтись $ P, Q \in \mathbb{F}_{\mathcal{X}}$, такие что $KL(P\ \|\ Q) \neq KL(Q\ \|\ P) $, что не позволяет считать KL-дивергенцию метрикой на на $\mathbb{F}_{\mathcal{X}}$.
+\end{claim} 
+
+Вариационный байесовский вывод (далее — VB) основан на следующей идее: заменить апостериорное распределение $Q(\theta\ |\ \bm{X})$, которое может быть устроено сколь угодно сложно, на удобную для оптимизации аппроксимацию $ Q^{\ast}(\theta) $ из семейства распределений $\mathcal{Q}$. Тогда есть следующий алгоритм приближённого поиска ОМА:
+
+\begin{algorithm}[H]
+	\SetAlgoLined
+	\KwResult{$\theta^{\ast}_{0}, Q^{\ast}_{0}$ — приближение ОМА и соотв. аппроксимация }
+	$Q^{\ast}_{0} := \arg\min\limits_{Q^{\ast} \in \mathcal{Q}} KL(Q^{\ast}\ \|\ Q(\cdot\ |\ \bm{X})) $\;
+	$\theta^{\ast}_{0} := \arg\max\limits_{\theta \in \Theta} Q^{\ast}_{0}(\theta) $
+	\caption{Вариационный байесовский вывод, общий вид}
+\end{algorithm}
+
+Этот метод центральный для алгоритма XClone, потому в этом разделе приведен его подробный обзор.
+\begin{definition}[\textit{ELBO}]
+	В обозначениях данного раздела, величину 
+	$$
+	\mathcal{L}(Q^{\ast}) := \int_{\Theta} q^{\ast} (\theta) \log \frac{f(\theta, \bm{X})}{q^{\ast}(\theta)} d\theta
+	$$
+	называют ELBO — evidence lower bound. На русский язык это можно перевести как <<нижняя оценка логарифма обоснованности>>, но устоявшегося перевода в сообществе нет, потому обычно используют сокращение ELBO.
+\end{definition}
+
+\begin{claim}
+	Максимизация ELBO по $Q^{\ast} \in \mathcal{Q}$  эквивалентна минимизации $KL(Q^{\ast}\ \|\ Q_{\bm{X}})$, где $Q_{\bm{X}}(\theta)Q(\cdot\ |\ \bm{X})$.
+\end{claim}
+\begin{proof}
+	Распишем $KL(Q^{\ast}\ \|\ Q_{\bm{X}})$:
+	\begin{equation}
+	\begin{aligned}
+	KL(Q^{\ast}\ \|\ Q_{\bm{X}}) &= \E_{\phi \sim Q^{\ast}} \log \frac{q^{\ast}(\phi)}{q_{\bm{X}}(\phi)} =\\
+	&= -\E_{\phi \sim Q^{\ast}} \log \frac{q_{\bm{X}}(\phi)}{q^{\ast}(\phi)} =\\
+	&= -\E_{\phi \sim Q^{\ast}} \log \frac{f(\phi, \bm{X})}{p(\bm{X}) q^{\ast}(\phi)} =\\
+	&= -\E_{\phi \sim Q^{\ast}} \log \frac{f(\phi, \bm{X})}{q^{\ast}(\phi)} + \E_{\phi \sim Q^{\ast}} \log  p(\bm{X}) =\\
+	&= -\mathcal{L}(Q^{\ast}) + \log p(\bm{X}) 
+	\end{aligned}
+	\label{ELBO_derivation}
+	\end{equation}
+	Отсюда получаем, что $ \log p(\bm{X}) = L(Q^{\ast}) + KL(Q^{\ast}\ \|\ Q_{\bm{X}}) $. Логарифм обоснованности не зависит от $\theta$, потому максимизация $\mathcal{L}(Q^{\ast})$ эквивалентна минимизации $ KL(Q^{\ast}\ \|\ Q_{\bm{X}}) $, а потому и решению задачи вариационного байесовского вывода.
+	
+	ELBO можно получить и иначе, расписав $\log p(\bm{X})$:
+	\begin{equation}
+		\begin{aligned}
+			\log p(\bm{X}) &= \log \int_{\Theta} f(\theta, \bm{X}) d\theta \\
+			&= \log \int_{\Theta} f(\theta, \bm{X}) \frac{q^{\ast}(\theta)}{q^{\ast}(\theta)} d\theta =\\
+			&= \log \E_{\phi \sim Q^{\ast}} \frac{f(\phi, \bm{X})}{q^{\ast}(\phi)} =\\
+			&= \left[ \text{Неравенство Йенсена} \right] \ge\\
+			&\ge \E_{\phi \sim Q^{\ast}} \log \frac{f(\phi, \bm{X})}{q^{\ast}(\phi)} = \mathcal{L}(Q^{\ast})
+			\end{aligned}
+		\label{alternative_ELBO_derivation}
+	\end{equation}
+	Такое доказательство не проясняет связь с VB, но полезно в контексте других приложений и помогает понять, почему эта величина имеет именно такое название.
+\end{proof}
+
+\begin{remark}
+	В силу того, что KL-дивергенция не симметрична, вид оптимальной аппроксимации может противоречить интуитивному представлению о том, как она должна быть устроена. Для лучшего понимания полезно рассмотреть несколько примеров из \cite{MurphyProbabilisticML} (стр. 734), которые иллюстрируют разницу между $KL(Q^{\ast}\ \|\ Q_{\bm{X}})$ — \textit{forward KL} — и $KL(Q_{\bm{X}}\ \|\ Q^{\ast})$ — \textit{reverse KL}. 
+	
+	\begin{figure}[H]
+		\centering
+		\includegraphics[keepaspectratio=true, scale=0.4]{images/forward_reverse_kl_bimodal.png}
+		\caption{Аппроксимация бимодального распределения $Q$ (синие линии) двумерным гауссовским распределением $Q^{\ast}$ (красные линии). (а) — результат минимизации $KL(Q\ \|\ Q^{\ast})$, (b)-(с) — варианты оптимального приближения при минимизации $KL(Q^{\ast}\ \|\ Q)$ } 
+	\end{figure}
+	
+	\begin{figure}[H]
+		\centering
+		\includegraphics[keepaspectratio=true, scale=0.4]{images/forward_reverse_kl_symmetric_gaussian.png}
+		\caption{Аппроксимация распределения $Q$ симметричным двумерным гауссовским распределением $Q^{\ast}$. (а) — результат минимизации $KL(Q^{\ast}\ \|\ Q)$, (b) — $KL(Q\ \|\ Q^{\ast})$} 
+	\end{figure}
+	
+	Видно, что при минимизации reverse-KL локальные максимумы аппроксимации $Q^{\ast}$ скорее всего будут совпадать с таковыми у $Q$. При этом может быть так, что $Q^{\ast}$ будет хорошо приближать $Q$ только на каком-то множестве, которому распределение $Q$ сопоставляет большую вероятность, потому её называют \textbf{zero-forcing}. Минимизация же forward KL будет стремиться хорошо объяснить всё распределение $Q$ в целом, а не только отдельные, важные фрагменты, её называют \textbf{zero-avoiding}.  В обоих случаях наблюдаемое поведение связано с тем, какая плотность оказывается в знаменателе отношения под логарифмом.	
+\end{remark}
+
+Указанная в предыдущем замечании особенность \textbf{очень важная}. Она показывает, что VB, в отличие от MCMC, может даже в пределе не давать возможности семплировать из истинного распределения. Тем не менее, VB существенно проще вычислительно, так как это оптимизационная задача, для решения которой есть хорошо разработанные методы стохастической и распределённой оптимизации. Более того, часто одного только VB бывает достаточно. Вопрос о том, когда использовать VB, а когда MCMC, хорошо резюмирует приведенная цитата из \cite{VariationalInferenceReview}:
+
+\textit{<<Thus, variational inference is suited to large data sets and scenarios where we want to
+	quickly explore many models; MCMC is suited to smaller data sets and scenarios where
+	we happily pay a heavier computational cost for more precise samples. For example, we
+	might use MCMC in a setting where we spent 20 years collecting a small but expensive data
+	set, where we are confident that our model is appropriate, and where we require precise
+	inferences. We might use variational inference when fitting a probabilistic model of text to
+	one billion text documents and where the inferences will be used to serve search results
+	to a large population of users. In this scenario, we can use distributed computation and
+	stochastic optimization to scale and speed up inference, and we can easily explore many
+	different models of the data.>>}
+
+\begin{remark}
+	ELBO можно переписать как $\mathcal{L}(Q^{\ast}) = \E_{\phi \sim Q^{\ast}} f(\phi, \bm{X}) - H(Q^{\ast})$, где $H$ — энтропия. Если $Q^{\ast} = Q_{\bm{X}}$, то левое слагаемое это в точности величина, которая максимизируется на M-шаге EM-алгоритма. Это сходство неслучайно и поясняется в \cite{VariationalInferenceReview}:
+	\textit{<<Unlike variational inference, EM assumes the expectation over posterior distribution of latent variables is computable and uses it in otherwise difficult parameter estimation problems. Unlike EM, variational inference does not estimate fixed model parameters — it is often used in a Bayesian setting where classical parameters are treated as latent variables. Variational inference applies to models where we cannot compute the exact conditional of the latent variables.>>}
+\end{remark}
+
+Чаще всего $\mathcal{Q}$ выбирают таким, чтобы распределения из него факторизуются по параметрам, т.е. что 
+$$
+	q^{\ast}(\theta) = \prod_{i=1}^{m} q_{i}^{\ast}(\theta_i)
+$$
+где $m$ это число параметров. Это т.н. \textbf{mean field approximation} — метод, вдохновлённый т.н. моделью Изинга из статистической физики. В \cite{VariationalInferenceReview} (стр. 9-10) описан эффективный алгоритм оптимизации маржинальных плотностей $q_{i}^{\ast}$. Тем не менее, в модели XClone он не используется, т.к. максимизация ELBO происходит автоматически за счёт использования примитивов из Tensorflow.Distributions\cite{TensorflowDistributions}. При этом $\mathcal{L}(Q^{\ast})$ оптимизируется неявно, посредством максимизации правой части равенства $\mathcal{L}(Q^{\ast}) = KL(Q^{\ast}\ \|\ Q) + \log p(\bm{X})$, т.к. использование сопряжённых распределений позволяет расписать её в пригодном для покоординатной оптимизации виде.
+
+Апостериорные распределения на параметрах модели имеют вид
 \begin{equation}
 	\begin{split}
-		p(Z, Y, \bm\theta, \bm m, \bm\gamma | A, D)  & \propto p(Z, Y, \bm\theta, \bm m, \bm\gamma) p(A, D | Z, Y, \bm\theta, \bm m, \bm\gamma) \\
-		& = p(Z, Y, \bm\theta, \bm m, \bm\gamma) p(D | Z, Y, \bm m, \bm\gamma) p(A, D | Z, Y, \bm\theta)
+		p(\bm{Z}, \bm{Y}, \bm{\theta}, \bm{m}, \bm{\gamma}\ |\ \bm{AD}, \bm{DP}, \bm{RD})  & \propto p(\bm{Z}, \bm{Y}, \bm{\theta}, \bm{m}, \bm\gamma) p(\bm{AD}, \bm{DP}, \bm{RD} | \bm{Z}, \bm{Y}, \bm{\theta}, \bm{m}, \bm{\gamma}) \\
+		& = p(\bm{Z}, \bm{Y}, \bm{\theta}, \bm{m}, \bm{\gamma}) p(\bm{RD}\ |\ \bm{Z}, \bm{Y}, \bm{m}, \bm{\gamma}) p(\bm{AD}, \bm{DP} | \bm{Z}, \bm{Y}, \bm{\theta})
 	\end{split}
-\label{Eq:posterior}
+	\label{Eq:xclone_vb_posterior}
 \end{equation}
-where the prior distribution is independent for all five variables $\Omega=\{Z, Y, \bm\theta, \bm m, \bm\gamma\}$, hence can be multiplied from Eq (\ref{Eq:prior-ASE}) and Eq (\ref{Eq:prior-RDR}). Similarly, the likelihood term can be multiplied by the two likelihood terms in Eq(\ref{Eq:ASE-lik}) and Eq(\ref{Eq:RDR-base}).
+где функция правдоподобия распадается в произведение по BAF- и RDR-модулям, т.к. матрицу $\bm{RD}$ можно по смыслу считать независищяей от матриц $\bm{AD}, \bm{DP}$ по смыслу. Строго говоря, между $\bm{DP}$ и $\bm{RD}$ есть положительная корреляция, но она не добавляет новой информации в модель, потому ею было решено пренебречь. Также скрытые переменные из $\Omega := \{\bm{Z}, \bm{Y}, \bm{m}, \bm{\gamma}\}$ независимы в совокупности. Для апостериорного распределения $p(\Omega\ |\ \bm{AD}, \bm{DP}, \bm{RD})$. Then the inference problem becomes an optimisation problem for minimising the evidence lower bounder (ELBO), as follows 
 
-Here, we introduce a variational Bayes to infer the posterior of the five000 unknown variables $p(\Omega|A,D)$. Then the inference problem becomes an optimisation problem for minimising the evidence lower bounder (ELBO), as follows 
 \begin{equation}
-\mathtt{L}(q) = - \mathcal{KL}(q(\Omega)||p(\Omega)) + \int{ q(\Omega) \log p(A,D|\Omega)} \text{d} \Omega
+	\mathtt{L}(q) = - \mathcal{KL}(q(\Omega)||p(\Omega)) + \int{ q(\Omega) \log p(A,D|\Omega)} \text{d} \Omega
 \end{equation}
+
 where the variational distribution $q(\Omega)$ is in the same form as its prior distribution Eq (\ref{Eq:prior-ASE}) and Eq (\ref{Eq:prior-RDR}), while we aim to optimize their parameters to achive the highest ELBO. The details of the derivations can be found in page 463 in Bishop, PRML 2006 or Vireo paper (TODO: introduce it here).
 
 For the right part, we can split it into the allelic fraction and expression count modules, namely
@@ -495,7 +627,7 @@ For the right part, we can split it into the allelic fraction and expression cou
 The allelic fraction module could further analytically written as follows,
 \begin{equation}
 	\footnotesize
-		\begin{split}
+	\begin{split}
 		\mathbb{E}_{Z, Y, \bm\theta}[\log p(A,D|Z, Y,\bm\theta)] 
 		& = \int{ q(Z, Y, \bm\theta) \log p(A, D | Z, Y, \bm\theta)} \text{d} Z \text{d} Y \text{d} \bm\theta \\ 
 		& = \sum_{i=1}^N \sum_{j=1}^M  \sum_{k=1}^K  \sum_{t=1}^T  \left\{ \tilde \pi_{j,k} \tilde u_{i,k,t}  [w_{i,j} + a_{i,j}\varphi(\tilde\alpha) + b_{i,j}\varphi(\tilde\beta) - d_{i,j}\varphi(\tilde\alpha + \tilde\beta) ]  \right\}
@@ -549,6 +681,5 @@ where $\theta \sim \mathtt{Beta}(\alpha, \beta)$ and $1-\theta \sim \mathtt{Beta
 	\end{aligned}
 	\label{Eq:loglik-derivation-base}
 \end{equation}
-\subsubsection{Структура RDR-модуля}
 \subsubsection{Известные недостатки и планы по их исправлению}
 
