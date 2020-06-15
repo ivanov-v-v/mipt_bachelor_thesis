@@ -431,9 +431,7 @@ BAF- и RDR-модули связаны скрытыми переменными 
 	\item $z_{j,k} := I\{ \text{клетка } j \text{ принадлежит клональной линии } k \}$;
 	\item $y_{i,k,t} := I\{ \text{блок } i \text{ в клональной линии } k \text{ находится в состоянии } c_{t} \} $;
 \end{itemize}
-
 на которых заданы априорные вероятности $\bm{\pi}, \bm{U}$:
-
 \begin{equation}
 	\begin{split}
 		p(z_{j,k} = 1\ |\ \bm{\pi}) & = \mathtt{Multinom}(1; \bm\pi_{j}) = \pi_{j,k} \\
@@ -472,12 +470,12 @@ BAF- и RDR-модули связаны скрытыми переменными 
 	\begin{aligned}
 		\bm r_{j} &:= (r_{1, j}, \ldots, r_{N, j})\\
 		p(\bm r_{j}\ | \bm f_{k}) &:= \mathtt{Multinom}\left (\bm r_{j}\ \middle|\ \sum_{i=1}^{N} r_{i,j}, \bm f_{k}\right )\\
-		p(RD\ |\ Z, Y, \bm m, \bm\gamma)  & := \prod_{j=1}^{M} \prod_{k=1}^{K} p\left (\bm r_{j}\ \middle|\ \sum_{i=1}^{N} r_{i,j}, \bm f_{k}\right ) ^{z_{j,k}}
+		p(\bm{RD}\ |\ \bm{Z}, \bm{Y}, \bm{m}, \bm{\gamma})  & := \prod_{j=1}^{M} \prod_{k=1}^{K} p\left (\bm r_{j}\ \middle|\ \sum_{i=1}^{N} r_{i,j}, \bm f_{k}\right ) ^{z_{j,k}}
 	\end{aligned}
 	\label{Eq:xclone_vb_rdr_lik}
 \end{equation}
 
-Если $\bm{m}$ заранее неизвестно, то его можно смоделировать посредством задания априорного распределения $\mathtt{Dirichlet}(\bm\omega)$. Аналогично для $\mathbf{\gamma}$ в качестве априорного распределения задаётся $\mathtt{GP}(\bm\mu, \bm\Sigma)$, где под $\mathtt{GP}$ подразумевается дискретный гауссовский процесс с $\mu_t := \log((c_{t,1} + c_{t,2}) / 2 + \varepsilon)$ для достаточного малого положительного $\varepsilon$, а матрица ковариаций $\bm\Sigma$ задаётся RBF-ядром $K(\bm c_t, \bm c_{t\prime}) := l_1 \exp\{-l_2[(c_{t,1}-c_{t\prime,1})^2 + (c_{t,2}-c_{t\prime,2})^2]\}$, где $l_1,\ l_2$ — гиперпараметры модели. В формульной записи:
+Если $\bm{m}$ заранее неизвестно, то его можно смоделировать посредством задания априорного распределения $\mathtt{Dirichlet}(\bm\omega)$. Аналогично для $\mathbf{\gamma}$ в качестве априорного распределения задаётся $\mathtt{GP}(\bm\mu, \bm\Sigma)$, где под $\mathtt{GP}$ подразумевается дискретный гауссовский процесс с $\mu_t := \log((c_{t,m} + c_{t,p}) / 2 + \varepsilon)$ для достаточного малого положительного $\varepsilon$, а матрица ковариаций $\bm\Sigma$ задаётся RBF-ядром $K(\bm c_t, \bm c_{t\prime}) := l_1 \exp\{-l_2[(c_{t,m}-c_{t\prime,m})^2 + (c_{t,p}-c_{t\prime,p})^2]\}$, где $l_1,\ l_2$ — гиперпараметры модели. В формульной записи:
 \begin{equation}
 	\begin{split}
 		\bm m\ |\ \bm \omega &\sim \mathtt{Dirichlet}( \bm\omega)\\
@@ -487,6 +485,7 @@ BAF- и RDR-модули связаны скрытыми переменными 
 \end{equation}
 
 \subsubsection{Вариационный байесовский вывод}
+\paragraph{Общее описание метода}$  $\\
 Пусть $\bm{X} = (X_1, \ldots, X_n)$ — выборка из распределения с плотностью $p_{\theta}(\bm{X})$ ($p_{\theta}(\bm{X}) = \prod_{i=1}^{n} p_{\theta}(X_i)$), где $\theta$ — набор параметров распределения. Пусть $q$ — априорное распределение на $\Theta$ — множестве допустимых параметров. Тогда $f(\theta, \bm{X}) := p_{\theta}(\bm{X}) q(\theta)$ — плотность совместного распределения на $\Theta \times \mathcal{X}$. Тогда апостериорная плотность на параметрах выражается как
 $$
 	q(\theta\ |\ \bm{X}) := \frac{f(\theta, \bm{X})}{p(\bm{X})} = \frac{f(\theta, \bm{X})}{\int_{\Theta} f(t, \bm{X}) dt }  = \frac{f(\theta, \bm{X})}{\int_{\Theta} p_{t}(\bm{X}) q(t) dt } 
@@ -600,86 +599,186 @@ $$
 $$
 где $m$ это число параметров. Это т.н. \textbf{mean field approximation} — метод, вдохновлённый т.н. моделью Изинга из статистической физики. В \cite{VariationalInferenceReview} (стр. 9-10) описан эффективный алгоритм оптимизации маржинальных плотностей $q_{i}^{\ast}$. Тем не менее, в модели XClone он не используется, т.к. максимизация ELBO происходит автоматически за счёт использования примитивов из Tensorflow.Distributions\cite{TensorflowDistributions}. При этом $\mathcal{L}(Q^{\ast})$ оптимизируется неявно, посредством максимизации правой части равенства $\mathcal{L}(Q^{\ast}) = KL(Q^{\ast}\ \|\ Q) + \log p(\bm{X})$, т.к. использование сопряжённых распределений позволяет расписать её в пригодном для покоординатной оптимизации виде.
 
-Апостериорные распределения на параметрах модели имеют вид
+\paragraph{VB в алгоритме XClone}$ $\\
+Апостериорные распределения на параметрах модели XClone имеют вид
 \begin{equation}
 	\begin{split}
-		p(\bm{Z}, \bm{Y}, \bm{\theta}, \bm{m}, \bm{\gamma}\ |\ \bm{AD}, \bm{DP}, \bm{RD})  & \propto p(\bm{Z}, \bm{Y}, \bm{\theta}, \bm{m}, \bm\gamma) p(\bm{AD}, \bm{DP}, \bm{RD} | \bm{Z}, \bm{Y}, \bm{\theta}, \bm{m}, \bm{\gamma}) \\
-		& = p(\bm{Z}, \bm{Y}, \bm{\theta}, \bm{m}, \bm{\gamma}) p(\bm{RD}\ |\ \bm{Z}, \bm{Y}, \bm{m}, \bm{\gamma}) p(\bm{AD}, \bm{DP} | \bm{Z}, \bm{Y}, \bm{\theta})
+		&p(\bm{Z}, \bm{Y}, \bm{\theta}, \bm{m}, \bm{\gamma}\ |\ \bm{AD}, \bm{DP}, \bm{RD}) \propto\\ 
+		&\propto p(\bm{Z}, \bm{Y}, \bm{\theta}, \bm{m}, \bm\gamma) p(\bm{AD}, \bm{DP}, \bm{RD} | \bm{Z}, \bm{Y}, \bm{\theta}, \bm{m}, \bm{\gamma}) = \\
+		& = p(\bm{Z}, \bm{Y}, \bm{\theta}, \bm{m}, \bm{\gamma}) \cdot \mathunderline{green}{p(\bm{AD}, \bm{DP} | \bm{Z}, \bm{Y}, \bm{\theta})} \cdot \mathunderline{red}{p(\bm{RD}\ |\ \bm{Z}, \bm{Y}, \bm{m}, \bm{\gamma})}
 	\end{split}
 	\label{Eq:xclone_vb_posterior}
 \end{equation}
-где функция правдоподобия распадается в произведение по BAF- и RDR-модулям, т.к. матрицу $\bm{RD}$ можно по смыслу считать независищяей от матриц $\bm{AD}, \bm{DP}$ по смыслу. Строго говоря, между $\bm{DP}$ и $\bm{RD}$ есть положительная корреляция, но она не добавляет новой информации в модель, потому ею было решено пренебречь. Также скрытые переменные из $\Omega := \{\bm{Z}, \bm{Y}, \bm{m}, \bm{\gamma}\}$ независимы в совокупности. Для апостериорного распределения $p(\Omega\ |\ \bm{AD}, \bm{DP}, \bm{RD})$. Then the inference problem becomes an optimisation problem for minimising the evidence lower bounder (ELBO), as follows 
+где функция правдоподобия распадается в произведение по BAF- и RDR-модулям, т.к. матрицу $\bm{RD}$ можно по смыслу считать независищяей от матриц $\bm{AD}, \bm{DP}$ по смыслу. Строго говоря, между $\bm{DP}$ и $\bm{RD}$ есть положительная корреляция, но она не добавляет новой информации в модель, потому ею было решено пренебречь. Скрытые переменные из $\Omega := \{\bm{Z}, \bm{Y}, \bm{m}, \bm{\gamma}\}$ независимы в совокупности. Апостериорное распределенияе $p(\Omega\ |\ \bm{AD}, \bm{DP}, \bm{RD})$, как следствие, факторизуется по скрытым переменным. В силу того, что в модели всюду используются сопряжённые распределения, апостериорное распределение имеет тот же вид, что и априорное. Тем не менее, явно вычислить его параметры затруднительно, проще выразить VB через примитивы Tensorflow.Distributions\cite{TensorflowDistributions} и найти ОАМ стохастическим градиентным спуском в пространстве параметров.
 
+Стоит отметить, что ELBO в стат.модели XClone по явной формуле (через матожидание) оптимизировать сложнее, чем его представление через разность логарифма обоснованности и KL-дивергенции.  
 \begin{equation}
-	\mathtt{L}(q) = - \mathcal{KL}(q(\Omega)||p(\Omega)) + \int{ q(\Omega) \log p(A,D|\Omega)} \text{d} \Omega
+	\mathtt{L}(q) = \int{ q(\Omega) \log p(\bm{AD}, \bm{DP}, \bm{RD}\ |\ \Omega)} \text{d} \Omega -\mathcal{KL}(q(\Omega)\ \|\ p(\Omega))
 \end{equation}
 
-where the variational distribution $q(\Omega)$ is in the same form as its prior distribution Eq (\ref{Eq:prior-ASE}) and Eq (\ref{Eq:prior-RDR}), while we aim to optimize their parameters to achive the highest ELBO. The details of the derivations can be found in page 463 in Bishop, PRML 2006 or Vireo paper (TODO: introduce it here).
-
-For the right part, we can split it into the allelic fraction and expression count modules, namely
-\begin{equation}
+\noindent Логарифм обоснованности распадается в сумму по BAF- и RDR-модулям.
+\begin{equation} 
 	\begin{split}
-		\int{ q(\Omega) \log p(A,D|\Omega)} \text{d} \Omega =  
-		& \int{ q(Z, Y, \bm\theta) \log p(A, D | Z, Y, \bm\theta)} \text{d} Z \text{d} Y \text{d} \bm\theta + \\
-		& \int{ q(Z, Y, \bm m, \bm\gamma) \log p(D|Z, Y,\bm m, \bm\gamma)} \text{d} \bm m, \text{d} \bm\gamma
+		&\int{ q(\Omega) \log p(\bm{AD}, \bm{DP}, \bm{RD}\ |\ \Omega)} \text{d} \Omega =\\
+		&= \mathunderline{green}{\int{ q(\bm{Z}, \bm{Y}, \bm{\theta}) \log p(\bm{AD}, \bm{DP}\ |\ \bm{Z}, \bm{Y}, \bm{\theta})} \text{d} \bm Z \text{d} \bm{Y} \text{d} \bm{\theta}} + \\
+		& + \mathunderline{red}{\int{ q(\bm{Z}, \bm{Y}, \bm{m}, \bm{\gamma}) \log p(\bm{RD}\ |\ \bm{Z}, \bm{Y}, \bm{m}, \bm{\gamma})} \text{d} \bm{m} \text{d} \bm{\gamma}}
 	\end{split}
 \end{equation}
-The allelic fraction module could further analytically written as follows,
+
+\paragraph{Вывод ELBO для BAF-модуля}$  $\\
+\begin{claim}
+Лог-боснованность BAF-модуля можно расписать как:
 \begin{equation}
 	\footnotesize
 	\begin{split}
-		\mathbb{E}_{Z, Y, \bm\theta}[\log p(A,D|Z, Y,\bm\theta)] 
-		& = \int{ q(Z, Y, \bm\theta) \log p(A, D | Z, Y, \bm\theta)} \text{d} Z \text{d} Y \text{d} \bm\theta \\ 
-		& = \sum_{i=1}^N \sum_{j=1}^M  \sum_{k=1}^K  \sum_{t=1}^T  \left\{ \tilde \pi_{j,k} \tilde u_{i,k,t}  [w_{i,j} + a_{i,j}\varphi(\tilde\alpha) + b_{i,j}\varphi(\tilde\beta) - d_{i,j}\varphi(\tilde\alpha + \tilde\beta) ]  \right\}
+		&\mathunderline{green}{\mathbb{E}_{\bm{Z}, \bm{Y}, \bm{\theta}}\log p(\bm{AD}, \bm{DP}\ |\ \bm{Z}, \bm{Y},\bm{\theta})} = \\
+		& = \int{ q(\bm{Z}, \bm{Y}, \bm{\theta}) \log p(\bm{AD}, \bm{DP}\ |\ \bm{Z}, \bm{Y}, \bm\theta)} \text{d} \bm{Z} \text{d} \bm{Y} \text{d} \bm{\theta} \\ 
+		& = \sum_{i=1}^N \sum_{j=1}^M  \sum_{k=1}^K  \sum_{t=1}^T  \left\{\tilde \pi_{j,k} \tilde u_{i,k,t}  [w_{i,j} + a_{i,j}\psi(\tilde \alpha_t) + b_{i,j}\psi(\tilde \beta_t) - d_{i,j}\psi(\tilde \alpha_t + \tilde \beta_t) ]  \right\}
 	\end{split}
 \end{equation}
-where $w_{i,j}=\log \binom{d_{i,j}}{a_{i,j}}$ is the logarithm of binomial coefficient, $\varphi(\cdot)$ is the digamma function, and $\tilde \cdot$ is the parameters for variational posterior distributions. This part is identical to Vireo model.
+где $b_{i,j} := d_{i,j} - a_{i,j}$, $\tilde \cdot$ указывает, что имеется в виду аппроксимация истинной апостериорной вероятности, $w_{i,j} := \log \binom{d_{i,j}}{a_{i,j}}$, $\psi(\cdot)$ — дигамма-функция, $\psi(z) := \frac{\Gamma'(z)}{\Gamma(z)} = -\gamma + \int_{0}^{1} \left( \frac{1 - t^{z}}{1 - t} \right) dt$, где $\Gamma$ это гамма-функция Эйлера, а $\gamma$ это константа Эйлера-Маскерони, $\gamma := \lim\limits_{n \to \infty} \left( -\ln n  + \sum_{k=1}^{n} \frac{1}{k} \right)$.
+\end{claim}
+\begin{proof}
+	BAF-модуль эквивалентен модели \cite{Vireo} и имеет аналогичное доказательство.
+	\begin{equation*}
+		\footnotesize
+		\begin{split}
+			& \int{ q(\bm{Z}, \bm{Y}, \bm{\theta}) \log p(\bm{AD}, \bm{DP}\ |\ \bm{Z}, \bm{Y}, \bm{\theta})} \text{d} \bm{Z} \text{d} \bm{Y} \text{d} \bm{\theta} \\ 
+			& = \mathbb{E}_{\bm{Z}, \bm{Y}, \bm{\theta}}\left[\log p(\bm{AD}, \bm{DP}\ |\ \bm{Z}, \bm{Y}, \bm{\theta})\right] \\
+			& = \mathbb{E}_{\bm{Z}, \bm{Y}, \bm{\theta}}\left[\log \prod_{i=1}^{N} \prod_{j=1}^{M} \prod_{k=1}^{K}\prod_{t=1}^{T} p(a_{i,j}\ |\ d_{i,j}, \theta_t) ^{z_{j,k} \times y_{i,k,t}}\right] \\
+			& = \mathbb{E}_{\bm{Z}, \bm{Y}, \bm\theta}\sum_{i=1}^{N} \sum_{j=1}^{M} \sum_{k=1}^{K}\sum_{t=1}^{T} [{z_{j,k} y_{i,k,t} \log{\mathtt{Binom}(a_{i,j}\ |\ d_{i,j}, \theta_t)}}] \\
+			& = \sum_{i=1}^{N} \sum_{j=1}^{M} \sum_{k=1}^{K}\sum_{t=1}^{T} \mathbb{E}_{\bm{Z}, \bm{Y}, \bm\theta}[z_{j,k} y_{i,k,t} \log{\mathtt{Binom}(a_{i,j}\ |\ d_{i,j}, \theta_t)}] \\
+			& = \sum_{i=1}^{N} \sum_{j=1}^{M} \sum_{k=1}^{K}\sum_{t=1}^{T} \mathbb{\bm{E}}_{\bm{Z}}[z_{j,k}] \mathbb{E}_{\bm{Y}}[y_{i,k,t}] \mathbb{E}_{\bm\theta}[\log{\mathtt{Binom}(a_{i,j}\ |\ d_{i,j}, \theta_t)}] \\
+			& = \sum_{i=1}^{N} \sum_{j=1}^{M} \sum_{k=1}^{K}\sum_{t=1}^{T} \left\{ \tilde \pi_{j,k} \tilde u_{i,k,t} \mathbb{E}_{\bm\theta}[\log{\mathtt{Binom}(a_{i,j}\ |\ d_{i,j}, \theta_t)}]\right\} \\
+			& = \sum_{i=1}^N \sum_{j=1}^M  \sum_{k=1}^K  \sum_{t=1}^T  \left\{ \tilde \pi_{j,k} \tilde u_{i,k,t}  [w_{i,j} + a_{i,j}\psi(\tilde\alpha_t) + b_{i,j}\psi(\tilde\beta_t) - d_{i,j}\psi(\tilde\alpha_t + \tilde\beta_t) ]  \right\}
+		\end{split}
+	\end{equation*}
+	Где матожидание логарифма плотности бета-биномиального распределения, имеет следующие представление, задействующее дигамма-функцию:
+	\begin{align*}
+			& \mathbb{E}_{\alpha, \beta}[\log{q(a\ |\ d, \theta)}] = \\
+			& = \mathbb{E}_{\alpha, \beta}[\log{\mathtt{Binom}(a; d, \theta)}] = \\
+			& = \mathbb{E}_{\alpha, \beta}\left[\log{\binom{a}{d}} + a\log{\theta} + (d-a)\log{(1-\theta)}\right] = \\
+			& = \log{\binom{a}{d}} + a\mathbb{E}_{\theta}[\log{\theta}] + (d-a)\mathbb{E}_{\beta, \alpha}[\log{(1-\theta)}] = \\
+			& = \log{\binom{a}{d}} + a(\psi(\alpha) - \psi(\alpha + \beta)) + (d-a) (\psi(\beta) - \psi(\alpha + \beta)) = \\
+			& = \log{\binom{a}{d}} + a\psi(\alpha) + (d-a)\psi(\beta) - d \psi(\alpha + \beta)
+	\end{align*}
+	Где тождество $\mathbb{E}_{\alpha, \beta}[\log{\theta}] = \psi(\alpha) - \psi(\alpha + \beta)$ доказывается так:
+	\begin{align*}
+			\mathbb{E}_{\alpha, \beta} \log \theta =
+			&= \int_0^1 \ln x\, \mathtt{Beta}(x; \alpha, \beta) dx =\\ 
+			&= \int_0^1 \ln x \,\frac{ x^{\alpha-1}(1-x)^{\beta-1}}{\mathtt{B}(\alpha,\beta)} dx =\\
+			&= \frac{1}{\mathtt{B}(\alpha,\beta)} \, \int_0^1 \frac{\partial x^{\alpha-1}(1-x)^{\beta-1}}{\partial \alpha} dx =\\
+			&= \frac{1}{\mathtt{B}(\alpha,\beta)} \frac{\partial}{\partial \alpha} \int_0^1 x^{\alpha-1}(1-x)^{\beta-1} dx =\\
+			&= \frac{1}{\mathtt{B}(\alpha,\beta)} \frac{\partial \mathtt{Beta}(\alpha,\beta)}{\partial \alpha} dx = \\
+			&= \frac{\partial \ln \mathtt{B}(\alpha,\beta)}{\partial \alpha} = \\
+			&= \frac{\text{d} \ln \Gamma(\alpha)}{\text{d}\alpha} - \frac{\partial \ln \Gamma(\alpha + \beta)}{\partial \alpha} = \\
+			&= \psi(\alpha) - \psi(\alpha + \beta)
+	\end{align*}
+\end{proof}
 
-\textbf{Supplementary Materials}
-\textbf{Derivation of likelihood equation (3.9, ASE module)}
-The allelic fraction module could be analytically derived as follows,
-\begin{equation}
-	\footnotesize
-	\begin{split}
-		& \int{ q(Z, Y, \bm\theta) \log p(A, D | Z, Y, \bm\theta)} \text{d} Z \text{d} Y \text{d} \bm\theta \\ 
-		& = \mathbb{E}_{Z, Y, \bm\theta}[\log p(A,D|Z, Y,\bm\theta)] \\
-		& = \mathbb{E}_{Z, Y, \bm\theta}[\log \prod_{i=1}^{N} \prod_{j=1}^{M} \prod_{k=1}^{K}\prod_{t=1}^{T} p(a_{i,j}|d_{i,j}, \theta_t) ^{z_{j,k} \times y_{i,k,t}}] \\
-		& = \mathbb{E}_{Z, Y, \bm\theta}\sum_{i=1}^{N} \sum_{j=1}^{M} \sum_{k=1}^{K}\sum_{t=1}^{T} [{z_{j,k} y_{i,k,t} \log{\mathtt{binom}(a_{i,j}|d_{i,j}, \theta_t)}}] \\
-		& = \sum_{i=1}^{N} \sum_{j=1}^{M} \sum_{k=1}^{K}\sum_{t=1}^{T} \mathbb{E}_{Z, Y, \bm\theta}[z_{j,k} y_{i,k,t} \log{\mathtt{binom}(a_{i,j}|d_{i,j}, \theta_t)}] \\
-		& = \sum_{i=1}^{N} \sum_{j=1}^{M} \sum_{k=1}^{K}\sum_{t=1}^{T} \mathbb{E}_{Z}[z_{j,k}] \mathbb{E}_{Y}[y_{i,k,t}] \mathbb{E}_{\bm\theta}[\log{\mathtt{binom}(a_{i,j}|d_{i,j}, \theta_t)}] \\
-		& = \sum_{i=1}^{N} \sum_{j=1}^{M} \sum_{k=1}^{K}\sum_{t=1}^{T} \left\{ \tilde \pi_{j,k} \tilde u_{i,k,t} \mathbb{E}_{\bm\theta}[\log{\mathtt{binom}(a_{i,j}|d_{i,j}, \theta_t)}]\right\} \\
-		& = \sum_{i=1}^N \sum_{j=1}^M  \sum_{k=1}^K  \sum_{t=1}^T  \left\{ \tilde \pi_{j,k} \tilde u_{i,k,t}  [w_{i,j} + a_{i,j}\varphi(\tilde\alpha_t) + b_{i,j}\varphi(\tilde\beta_t) - d_{i,j}\varphi(\tilde\alpha_t + \tilde\beta_t) ]  \right\}
-	\end{split}
-\end{equation}
+\begin{remark}
+	Отдельный интерес представляет подход к вычислению величины $w_{i,j} = \log \binom{d_{i,j}}{a_{i,j}}$. Дело в том, что числа с плавающей точкой в реализации большинства языков программирования имеют ограниченную точность, которая не позволяет отдельно вычислить биномиальный коэффициент, а потом взять от него логарифм. Даже в языке Python, в котором реализована длинная арифметика в целых числах, взятие логарифма может привести к переполнению типа при больших значениях $d_{i, j}$ и $a_{i, j} \simeq \frac{1}{2} d_{i, j}$. 
+	
+	Безусловно, можно вычислять $\log \binom{d_{i,j}}{a_{i,j}}$ как 
+	$$
+		\sum_{s=0}^{a_{i, j} - 1} \log (d_{i,j} - s)  - \sum_{s=0}^{a_{i, j}} \log s
+	$$ 
+	Тем не менее, при большой разнице между $d_{i, j}$ и $a_{i, j}$ при таком подходе ошибки представления логарифмов накапливаются, что может привести к заметному расхождению подсчитанной величины с истинным значением. 
+	
+	Этих недостатков лишена красивая аппроксимация величины $\log n!$, полученная логарифмированием асимптотической формулы для $n!$, полученной великим математиком Сринивасой Рамануджаном\cite{RamanujanLostNotebook} и уточняющей формулу Стирлинга. 
+	$$
+		\log n! \simeq n \log n - n  + \frac{\log (n (1 + 4n (1 + 2n)))}{6} + \frac{\log \pi}{2}
+	$$
+	Именно эта формула используется при вычислении $w_{i,j}$ в алгоритме XClone.
+\end{remark}
 
-The integral on $\mathtt{binom}$ distribution can be derived by the use of digamma function, as follows.
-\begin{equation}
-	\begin{split}
-		& \mathbb{E}_{\theta}[\log{p(a|d, \theta)}] \\
-		& = \mathbb{E}_{\theta}[\log{\mathtt{binom}(a; d, \theta)}]\\
-		& = \mathbb{E}_{\theta}[\log{\binom{a}{d}} + a\log{\theta} + (d-a)\log{(1-\theta)}] \\
-		& = \log{\binom{a}{d}} + a\mathbb{E}_{\theta}[\log{\theta}] + (d-a)\mathbb{E}_{\theta}[\log{(1-\theta)}] \\
-		& = \log{\binom{a}{d}} + a\mathbb{E}_{\theta}[\log{\theta}] + (d-a)\mathbb{E}_{1-\theta}[\log{(1-\theta)}] \\
-		& = \log{\binom{a}{d}} + a(\varphi(\alpha) - \varphi(\alpha + \beta)) + (d-a) (\varphi(\beta) - \varphi(\alpha + \beta))\\
-		& = \log{\binom{a}{d}} + a\varphi(\alpha) + (d-a)\varphi(\beta) - d \varphi(\alpha + \beta)
-	\end{split}
-\end{equation}
-where $\theta \sim \mathtt{Beta}(\alpha, \beta)$ and $1-\theta \sim \mathtt{Beta}(\beta, \alpha)$. By using digamma function $\varphi(\cdot)$, one could easily calculate the logarithm of the geometric mean $\mathbb{E}[\log{\theta}]=\varphi(\alpha) - \varphi(\alpha + \beta)$ (see derivation on wikipedia for Beta distribution).
+\paragraph{Вывод ELBO для RDR-модуля}$  $\\
+\begin{claim} \label{claim:rdr_evidence_mc}
+	Лог-обоснованность RDR-модуля можно записать как
+	\begin{equation}
+		\footnotesize
+		\begin{aligned}
+			&\mathunderline{red}{\E_{\bm{Z}, \bm{Y}, \bm{m}, \bm{\gamma}} \log p(\bm{RD}\ |\ \bm{Z}, \bm{Y},\bm{m}, \bm{\gamma})} =\\
+			&= \int{ q(\bm{Z}, \bm{Y}, \bm{m}, \bm{\gamma}) \log p(\bm{RD}\ |\ \bm{Z}, \bm{Y},\bm{m}, \bm{\gamma})} \text{d} \bm{m}, \text{d} \bm{\gamma} =\\
+			&= \sum_{i=1}^{N}\sum_{j=1}^{M}\sum_{k=1}^{K} \widetilde{\pi}_{j,k} \cdot r_{ij} \cdot \mathbb{E}_{\bm{m}, \bm{\gamma}} \log \widetilde{f}_{i,k} + C
+		\end{aligned}
+	\end{equation}
+	где $\tilde \cdot$ указывает, что имеется в виду аппроксимация истинной апостериорной вероятности, а
+	$$
+		\widetilde{f}_{i,k}\ |\ \bm{m}, \bm{\gamma} := \dfrac{\sum_{t=1}^{T} m_i \exp[\gamma_t] \tilde u_{i,k,t}}{\sum_{b=1}^{N}\sum_{t=1}^{T} m_b \exp[\gamma_t] \tilde u_{b,k,t}}
+	$$
+\end{claim}
+\begin{proof}
+	\begin{align*}
+		&\int{ q(\bm{Z}, \bm{Y}, \bm{m}, \bm{\gamma}) \log p(\bm{RD}\ |\ \bm{Z}, \bm{Y}, \bm{m}, \bm\gamma)} \text{d} \bm{m}, \text{d} \bm{\gamma} =\\
+		&= \mathbb{E}_{\bm{Z}, \bm{Y}, \bm{m}, \bm{\gamma}} \log p(\bm{RD}\ |\ \bm{Z}, \bm{Y},\bm{m}, \bm{\gamma})  =\\
+		&= \text{см. формулу } \ref{Eq:xclone_vb_rdr_lik} =\\
+		&= \mathbb{E}_{\bm{Z}, \bm{Y}, \bm{m}, \bm \gamma} \left[ \sum_{j=1}^{M}\sum_{k=1}^{K} \log p\left(\bm r_{j}\ \middle|\ \sum_{i=1}^{N} r_{i,j}, \bm f_{k}\right)^{z_{j,k}} \right] =\\
+		&= \sum_{j=1}^{M}\sum_{k=1}^{K} \mathbb{E}_{\bm{Z}, \bm{Y}, \bm{m}, \bm{\gamma}} \left[ z_{j,k} \cdot \log \left(r_{j}! \prod_{i=1}^{N}
+		\frac{\widetilde{f}_{i,k}^{r_{i,j}}}{r_{i,j}!} \right) \right] =\\
+		&= \text{ обозначим сумму всех констант через $C$ } =\\
+		&= \sum_{i=1}^{N}\sum_{j=1}^{M}\sum_{k=1}^{K} \mathbb{E}_{\bm{Z}, \bm{Y}, \bm{m}, \bm{\gamma}} \left[ z_{j,k} \cdot r_{ij} \log \widetilde{f}_{i,k}\right] + C =\\
+		&= \sum_{i=1}^{N}\sum_{j=1}^{M}\sum_{k=1}^{K} \widetilde{\pi}_{j,k} \cdot r_{ij} \cdot \mathbb{E}_{\bm{m}, \bm \gamma} \log \widetilde{f}_{i,k} + C
+	\end{align*}
+\end{proof}
 
-\textbf{Derivation of likelihood equation (3.9, RDR module)}
-\begin{equation}
-	\begin{aligned}
-		&\int{ q(Z, Y, \bm m, \bm\gamma) \log p(D|Z, Y,\bm m, \bm\gamma)} \text{d} \bm m, \text{d} \bm\gamma =\\
-		&= \mathbb{E}_{Z, Y, \bm m, \bm \gamma} \log p(D|Z, Y,\bm m, \bm\gamma)  =\\
-		&= (\text{Using eq. } \ref{Eq:RDR-lik}) =\\
-		&= \mathbb{E}_{Z, Y, \bm m, \bm \gamma} \left[ \sum_{j=1}^{M}\sum_{k=1}^{K} \log p(\bm d_{j}| d_j, \bm f_{k})^{z_{j,k}} \right] =\\
-		&= \sum_{j=1}^{M}\sum_{k=1}^{K} \mathbb{E}_{Z, Y, \bm m, \bm \gamma} \left[ z_{j,k} \cdot \log \left(d_{j}! \prod_{i=1}^{N}
-		\frac{\widetilde{f}_{i,k}^{d_{i,j}}}{d_{i,j}!} \right) \right] \propto\\
-		&\propto (\text{Dropping out constant terms}) \propto\\
-		&\propto \sum_{i=1}^{N}\sum_{j=1}^{M}\sum_{k=1}^{K} \mathbb{E}_{Z, Y, \bm m, \bm \gamma} \left[ z_{j,k} \cdot d_{ij} \log \widetilde{f}_{i,k}\right] =\\
-		&= \sum_{i=1}^{N}\sum_{j=1}^{M}\sum_{k=1}^{K} \widetilde{\pi}_{j,k} \cdot d_{ij} \cdot \mathbb{E}_{\bm m, \bm \gamma} \log \widetilde{f}_{i,k} 
-	\end{aligned}
-	\label{Eq:loglik-derivation-base}
-\end{equation}
 \subsubsection{Известные недостатки и планы по их исправлению}
+\paragraph{Избыточная сложность исходной модели}$  $\\
+Эксперименты показали, что модель можно упростить: 
+\begin{itemize}
+	\item В коде XClone $\bm{m}$ фиксировано и выводится из теоретических соображений о равномерном распределении прочтений по геному. Т.е. $m_{i} = \frac{l_i}{\sum_{b=1}^{N} l_b}$ это достаточно хорошая оценка матожидания доли прочтений в сегменте $i$, где $l_i$ это длина $i$-го блока в сегментации.
+	\item Далее, среднее значение $\bm{\gamma}$ тоже фиксировано, $\E \gamma_t := \log \frac{c_{t,m} + c_{m, 2}}{2} - \frac{e^{l_1^2}_{2}}{2}$, благодаря чему $ \E \exp(\gamma_t) = \frac{c_{t,m} + c_{m, 2}}{2} $, где $l_1$ это гиперпараметр ковариационной функции гауссовского процесса $\bm{\gamma}$. По изначальной задумке, по которой XClone можно было применять и для scRNA-seq данных, переменное $\bm{\gamma}$ было нужно для того, чтобы учесть не связанные с числом копий причины аллельного-дисбаланса в транскриптомных данных. 
+	
+	После того, как стало ясно, что транскриптомные данные этой же моделью обработать не получится из-за шумного BAF-сигнала и более сложной природы RDR-сигнала (в силу разреженности данных), потребность в переменном $\bm{\gamma}$ отпала. Более того, в силу того, что соотв. KL-слагаемое давало несущественный вклад в функцию ошибки, распределение на $\bm{\gamma}$ буквально за несколько итераций  вырождалось и теряло содержательный смысл. 
+	\begin{figure}[H]
+		\centering
+		\includegraphics[keepaspectratio=true, scale=0.4]{images/amplfication_factors_posterior_collapse.jpeg}
+		\caption{Вырождение апостериорного распределения. Ось Ох — координаты, ось Оу — матожидание вдоль компоненты. До того, как было принято решение зафиксировать $\gamma_t$, распределение на $\bm{\gamma}$ буквально за пару итераций VB вырождалось в одномерное.}
+	\end{figure}
+	Такое поведение можно было подавить умножением соотв. KL-слагаемого на большой множитель (порядка $10^6$), но такое преобразование было лишено смысла.
+	\item Аналогично, связь между BAF- и RDR-модулями через $\bm{Z}$ и $\bm{Y}$ оказалась слишком слабой. Из-за этого получалась абсурдная ситуация, когда BAF-модуль выводил правильные $\theta$, но они были никак не согласованы с ASCNV, которые выводил RDR-модуль. Как следствие было решено избавиться от первой размерности: $\forall i, j\ \forall t: \theta_{i,t} \stackrel{d}{=} \theta_{j, t},\ \E \theta_{i, t} = \frac{c_{t, m}}{c_{t, m} + c_{t, p}} $, где $\stackrel{d}{=}$ означает равенство по распределению, и зафиксировать параметры $\alpha_t$ и $\beta_t$. 
+	
+	В самом деле, блок-зависимые BAF-ы имели смысл для транскриптомных данных, где картина экспрессии зависела от состояния клетки в момент секвенирования, что искажало сигнал аллельного дисбаланса. После того, как стало ясно, что VB будет применяться только к геномным данным, потребность в блок-специфичных BAF-ах отпала сама собой.
+	
+	Более того, невооружённым взглядом видно, что BAF-модуль гораздо проще, чем RDR-модуль. Более того, гетерозиготные ОНП составляют малую долю от всего генома, и примерно половины прочтений теряется при переходе от $\bm{RD}$ к $\bm{DP}$. Как следствие, обоснованность RDR-модуля была на несколько порядков больше обоснованности BAF-модуля, да и оптимизировать её было значительно трудней. BAF-модуль быстро переобучался, буквально за несколько десятков итераций, после чего мешал VB находить оптимальные параметры RDR-модуля. 
+	\begin{figure}[H]
+		\centering
+		\begin{tabular}{cc}
+			\includegraphics[keepaspectratio=true, scale=0.4]{images/unsynced_allelic_rates.png} \\
+			\includegraphics[keepaspectratio=true, scale=0.4]{images/unsynced_read_depths.png}
+		\end{tabular}
+		\caption{Несогласованность найденных VB параметров при запуске на реальных данных при использовании блок-зависимых BAF-ов (на верхних тепловых картах). Слева — ожидаемые значения, справа — предсказанные. Видно, как BAF-модуль переобучается, а RDR-модуль хоть и улавливает какие-то закономерности, но, в целом, предсказывает что-то не то (даже по модулю того, что XClone не умеет детектировать whole-genome duplication).}
+	\end{figure}
+	Но как только частоты аллелей в блоках стали, по сути, определяться исключительно расстановкой наиболее вероятных $Y$ и $Z$, BAF-модуль перестал переобучаться на шум в данных и изменения параметров модулей стали согласованными.
+\end{itemize}
 
+\paragraph{Численное интегрирование в оценке обоснованности RDR-модуля}
+Аналитическую формулу для обоснованости RDR-модуля, увы, получить не удалось. Даже если фиксировать $\bm{m}$, неясно, как устроено отношение сумм зависимых логнормальных распределений в $\tilde f_{i, k}$. В \cite{SumOfLognormals} показано, что даже распределение числителя и знаменателя в отдельности имеет сложную структуру и не выражается через элементарные операции над стандартными распределениями. Как следствие, в коде алгоритма RDR-обоснованность приближается интегрированием по Монте-Карло. 
+
+Это существенный недостаток XClone в текущей редакции, т.к. метод Монте-Карло в общем случае имеет корневую сходимость\footnote{Конспект лекции в MIT: \url{https://ocw.mit.edu/courses/mechanical-engineering/2-086-numerical-computation-for-mechanical-engineers-fall-2014/nutshells-guis/MIT2_086F14_Monte_Carlo.pdf}}, и для получения точности хотя бы до третьего знака приходится использовать порядка $10^{6}$ точек, и это при фиксированном $\bm{m}$. В противном случае, пришлось бы семплировать ещё больше точек, чтобы сделать поправку на размерность пространства признаков (от нескольких сотен до нескольких тысяч). 
+
+\paragraph{Слишком большая разница масштабов отдельных слагаемых в ELBO}$ $\\
+
+\begin{figure}[H]
+	\centering
+	\includegraphics[keepaspectratio=true, scale=0.4]{images/unsynced_allelic_rates.png}
+	\caption{Несогласованность найденных VB параметров при запуске на реальных данных при использовании блок-зависимых BAF-ов (на верхних тепловых картах). Слева — ожидаемые значения, справа — предсказанные. Видно, как BAF-модуль переобучается, а RDR-модуль хоть и улавливает какие-то закономерности, но, в целом, предсказывает что-то не то (даже по модулю того, что XClone не умеет детектировать whole-genome duplication).}
+\end{figure}
+
+\paragraph{Концептуальная невозможность детектирования WGD}$ $\\
+АЛАЛАЛАЛАЛАЛА
+
+\paragraph{Необходимость вручную задавать ожидаемое число клональных линий в образце}$ $\\
+АЛАЛАЛАЛАЛАЛА
+
+\paragraph{Отсутствие коррекции технических факторов в RDR-модуле}$ $\\
+АЛАЛАЛАЛАЛАЛА
+
+\paragraph{Предположение о независимости клональных линий. Игнорирование субклональной структуры}$ $\\
+АЛАЛАЛАЛАЛАЛА
+
+\paragraph{Наивный подход к определению ожидаемого числа прочтений в блоках сегментации}$ $\\
+АЛАЛАЛАЛАЛАЛА
+
+\paragraph{Практические трудности вычисления плотности биномиального распределения при большой глубине покрытия}$ $\\
+АЛАЛАЛАЛАЛАЛА

@@ -77,7 +77,7 @@
 \graphicspath{{Images/}{../Images/}{images/} {../images/}} 
 
 \usepackage{math}
-
+\def\mathunderline#1#2{\color{#1}\underline{{\color{black}#2}}\color{black}}
 
 \def\E{\mathbb{E}}
 \def\Var{\mathrm{Var}}
@@ -122,6 +122,10 @@
 \newtheorem{definition}{Определение}[section]
 \newtheorem{example}{Пример}[section]
 
+\numberwithin{equation}{section}
+\setcounter{secnumdepth}{5}
+\setcounter{tocdepth}{5}
+
 \newenvironment{solution}
   {\begin{proof}[Решение:]}
   {\end{proof}}
@@ -146,7 +150,7 @@
     \vspace{1.5cm}	
     \hfill \break
     Студент \underline{\hspace{10.5cm}} Иванов В.В.\par
-    Научный руководитель к.ф-м.н. \underline{\hspace{4.8cm}}  Yuanhua Huang.\par
+    Научный руководитель к.ф-м.н. \underline{\hspace{4.8cm}}  Юнхуа Хуань.\par
     Зав. кафедрой д.ф-м.н., профессор \underline{\hspace{3.1cm}}  Райгородский А.М.\par
     \begin{center}
     МОСКВА, 2020
