@@ -202,17 +202,56 @@ EM-алгоритм (от английского \textit{"EM"} — \textit{"Expe
 	\item По заданной сегментации генома алгоритмом CellRanger оценивалось число копий каждого участка;
 	\item Потом по scDNA-seq оценивался аллельный дисбаланс в пределах каждого сегмента;
 	\item BAF-вектора конкатенировались с CNV-векторами, после чего клональные линии определялись как вершины на каком-то уровне дерева иерархической кластеризации;
-	\item BAF сегмента использовался для уточнения числа клонального копий на копиях хромосомы: из конфигураций $\{m_{i,k}, c_{i,k}-m_{i,k}\}_{m_{i,k}=0}^{c_{i,k}}$, где $c_{i, k}$ это общее число копий участка $i$ в клональной линии $k$, а $m_{i, k}$ — число копий на материнской хромосоме, подбиралась та, для которой отклонение $| \frac{m_{i,k}}{c_{i,k} - m_{i,k}} - BAF(i, k) |$ от BAF минимально. При этом BAF-вектор клональной линии определялся как усреднённые BAF-вектора клеток этой линии.
+	\item BAF сегмента использовался для уточнения числа клонального копий на копиях хромосомы: из конфигураций $\{(с_{i,k}, c_{i,k}-m_{i,k})\}_{m_{i,k}=0}^{c_{i,k}}$, где $c_{i, k}$ это общее число копий участка $i$ в клональной линии $k$, а $m_{i, k}$ — число копий на материнской хромосоме, подбиралась та, для которой отклонение $| \frac{m_{i,k}}{c_{i,k} - m_{i,k}} - BAF(i, k) |$ от BAF минимально. При этом BAF-вектор клональной линии определялся как усреднённые BAF-вектора клеток этой линии.
 	\item Аналогично, подсчитывался аллельный дисбаланс в клетках из scRNA-seq образца. Затем клетке присваивалась метка той клональной линии, ASCNV-вектор которой наилучшим образом объяснял бы наблюдаемые BAF-ы сегментов (в смысле максимизации правдоподобия в бета-биномиальной модели, где вероятности задавались долей копий сегмента на материнской копии хромосомы).
 \end{enumerate}
 Подход хорошо зарекомендовал себя на синтетических данных, но столкнулся с теми же проблемами, что и алгоритм CaSpER\cite{CaSpER}, который вышел незадолго после начала работы над XClone. Практика показала, что надёжно оценить BAF по данным scRNA-seq, полученных по протоколам от 10X Genomics, крайне трудно в силу их разреженности. В силу того, что других данных с достаточно богатой клональной структурой на тот момент не было, от этой архитектуры пришлось отказаться, а вместо переноса меток с геномных данных на транскриптомные сосредоточиться на поиске ASCNV в данных.
 
-\subsubsection{Plate notation}
-\subsubsection{Семплирование по Гиббсу}
-\subsubsection{Предложенная модель, её недостатки}
-\textbf{scDNA + CNV and scRNA, different samples}
+\subsubsection{Структура модели}
+Структура XClone-V1 вдохновлялась графической моделью <<Cardelino>>\cite{Cardelino} и имеет с ней много общего.
+\paragraph{Параметры:}
+\begin{enumerate}
+	\item \textbf{Константы:}
+	\begin{itemize}
+		\item $ M^{G}, M^{E} $ — число клетках в ДНК- и РНК-образцах соотв-но.
+		\item $ K $  — предполагаемое число клональных линий в образце.
+		\item $ N $ — количество сегментов в выбранной сегментации генома (она одна и та же в обоих образцах).
+		\item $ T_{\max} $ — максимальное допустимое число копий сегмента (всё, что больше этого значения, округляется к нему). Значение по умолчанию — 6.
+		\item $ \tau $ — набор допустимых конфигураций аллель-специфического числа копий. Значение по умолчанию — 
+		$$
+			\{(1, 0), (0, 1), (2, 0), (1, 1), (1, 2), \ldots, (T_{\max}, 0), \ldots, (0, T_{\max}) \}
+		$$ 
+		Случай $(0, 0)$, когда рассматриваемого сегмента нет на обеих копиях хромосомы, не рассматривается. Это логично, ведь из-за разреженности данных неясно, в самом ли деле произошла двойная делеция, или просто не хватает данных.
+	\end{itemize}
+	\item \textbf{Прочие заранее известные величины:}
+	\begin{itemize}
+		\item $ \bm{D^{G}}, \bm{D^{E}} $ — матрицы числа прочтений. Имеют размерности $(N, M^{G})$ и $(N, M^{E})$ соотв-но, где число прочтений внутри сегмента это сумма числа прочтений гетерозиготных ОНП внутри сегмента. 
+		\item $ \bm{A^{G}},\ \bm{A^{E}} $ — то же, но для прочтений материнского аллеля.
+		\item $ \textbf{f} = (f_1, \ldots, f_K)$ — $K$-мерный вектор с предсказанными частотами каждой из клональных линий ($ \sum_{k=1}^{K} f_{k} = 1 $). По умолчанию распределение равномерное: $\forall k: f_{k} = \frac{1}{K}$.
+		\item $ \bm{T} $ — матрица клональных ASCNV. Имеет размерность $(N, K)$, $\bm{T_{i,k}}$ — конфигурация сегмента $ i $ в клональной линии $ k $. Способ задания этой матрицы: берётся матрица числа копий, предсказанных CellRanger, а затем уточняется с помощью BAF-сигнала в данных. Число копий сегмента определяется как округлённое матожидание копий содержащихся в нём CNV-событий с точки зрения алгоритма CellRanger.
+		\item $\bm{I^{G}}$ — клональные линии клеток ДНК-образца. Определяются посредством максимизации правдоподобия в биномиальной модели: назначается метка той клональной линии, BAF-профиль которой больше всего похож на то, что видно в данных. 
+	\end{itemize}
+	\item \textbf{Скрытые переменные:}
+	\begin{itemize}
+		\item $ \bm{\Theta} $ — ожидаемая доля прочтений материнских аллелей в зависимости от ASCNV. $ \bm{\Theta_{i,t}} $ — BAF сегмента $i$ в конфигурации $t$. Если бы в модели были только ДНК-данные, то не было бы никакой нужды в сегмент-специфических частотах. Тем не менее, BAF-сигнал того же сегмента в той же клетке, но в РНК-данных может сильно отличаться от BAF-сигнала в ДНК-данных. Сегмент-специфические параметры позволяют подобрать копромиссное значение, которое достаточно хорошо описывает и ДНК-данные, и РНК-данные. Диапазон допустимого отклонения от теоретического значения контролируется заданием априорного распределения.
+		\item $ \bm{I^{E}} \in [K]^{M} $ — клональные линии клеток РНК-образца.
+	\end{itemize}
+	\item \textbf{Сокращения:}
+	\begin{itemize}
+		\item $ \bm{H^{G}}, \bm{H^{E}} $ — ASCNV-конфигурация сегментов в клетках при текущей расстановке клональных меток:
+		$$ 
+			\bm{H^{G}_{i,j}} := \bm{T_{i, I^{G}_{j}}},\quad \bm{H^{E}_{i,j}} := \bm{T_{i, I^{E}_{j}}}
+		$$
+		\item  $ \bm{X^{G}},\ \bm{X^{E}} $ — ожидемая доля прочтений материнских аллелей при текущей расстановке клональных меток:
+		$$ 
+			\bm{X^{G}_{i,j}} := \bm{\Theta_{i, H^{G}_{i,j}}},\quad \bm{X^{E}_{i,j}} := \bm{\Theta_{i, H^{E}_{i,j}}} 
+		$$
+	\end{itemize}
+\end{enumerate}
 
-\begin{figure}[h!]
+\paragraph{Визуализация:}
+В этих обозначениях модель XClone-V1 можно изобразить так:
+\begin{figure}[H]
 	\centering
 	\tikz{ %
 		\node[obs] (nu) {${\nu_{l}}$}; %
@@ -220,35 +259,35 @@ EM-алгоритм (от английского \textit{"EM"} — \textit{"Expe
 		\node[latent, fill=blue!20, left =of nu, xshift=-0.5cm] (I_G) {${I_{j}^G}$}; %
 		\node[latent, right=of nu, xshift=0.5cm] (I_E) {${I_{h}^E}$}; %
 		
-		\node[latent, rectangle, below=of I_G] (P_G) {${p_{ij}^G}$} ; %
-		\node[latent, rectangle, below=of I_E] (P_E) {${p_{ih}^E}$} ; %
+		\node[latent, rectangle, below=of I_G] (X_G) {${X_{ij}^G}$} ; %
+		\node[latent, rectangle, below=of I_E] (X_E) {${X_{ih}^E}$} ; %
 		
 		\node[latent, fill=blue!20, below=of Theta] (T) {${t_{ik}}$} ; %
-		\node[obs, below=of P_G] (A_G) {${a_{ij}^G}$} ; %
-		\node[obs, below=of P_E] (A_E) {${a_{ih}^E}$} ; %
+		\node[obs, below=of X_G] (A_G) {${a_{ij}^G}$} ; %
+		\node[obs, below=of X_E] (A_E) {${a_{ih}^E}$} ; %
 		\node[obs, left=of A_G] (D_G) {${d_{ij}^G}$} ; %
 		\node[obs, right=of A_E] (D_E) {${d_{ih}^E}$} ; %
 		
 		\edge {nu} {Theta} ; %
-		\edge {I_G} {P_G} ; %
-		\edge {I_E} {P_E} ; %
-		\edge {Theta} {P_G} ; %
-		\edge {T} {P_G} ; %
-		\edge {Theta} {P_E} ; %
-		\edge {T} {P_E} ; %
-		\edge {P_G} {A_G} ; %
+		\edge {I_G} {X_G} ; %
+		\edge {I_E} {X_E} ; %
+		\edge {Theta} {X_G} ; %
+		\edge {T} {X_G} ; %
+		\edge {Theta} {X_E} ; %
+		\edge {T} {X_E} ; %
+		\edge {X_G} {A_G} ; %
 		\edge {D_G} {A_G} ; %
-		\edge {P_E} {A_E} ; %
+		\edge {X_E} {A_E} ; %
 		\edge {D_E} {A_E} ; %
 		
 		
 		{\tikzset{plate caption/.append style={below=5pt of #1.south east}};
-			\plate[inner xsep=0.8cm, inner ysep=0.4cm, xshift=-0.6cm, yshift=0cm] {plate1} {(D_G) (A_G)(P_G)(D_E) (A_E)(P_E)} {CNV-haplo block $i$} };
+			\plate[inner xsep=0.8cm, inner ysep=0.4cm, xshift=-0.6cm, yshift=0cm] {plate1} {(D_G) (A_G)(X_G)(D_E) (A_E)(X_E)} {segment $i$} };
 		
 		{\tikzset{plate caption/.append style={below=30pt of #1.south}};
-			\plate[inner xsep=0.4cm, inner ysep=0.4cm, xshift=0.1cm, yshift=0.28cm, color=black] {plate1} {(D_G) (A_G)(P_G)(I_G)} {cell $j$ in scDNA} };
+			\plate[inner xsep=0.4cm, inner ysep=0.4cm, xshift=0.1cm, yshift=0.28cm, color=black] {plate1} {(D_G) (A_G)(X_G)(I_G)} {cell $j$ in scDNA} };
 		{\tikzset{plate caption/.append style={below=30pt of #1.south}};
-			\plate[inner xsep=0.4cm, inner ysep=0.4cm,  xshift=-0.1cm, yshift=0.28cm, color=black] {plate2} {(D_E) (A_E)(P_E)(I_E)} {cell $h$  in scRNA} };
+			\plate[inner xsep=0.4cm, inner ysep=0.4cm,  xshift=-0.1cm, yshift=0.28cm, color=black] {plate2} {(D_E) (A_E)(X_E)(I_E)} {cell $h$  in scRNA} };
 		
 		{\tikzset{plate caption/.append style={above=2pt of #1.north}};
 			\plate[inner sep=0.25cm, xshift=0cm, yshift=0.12cm] {plate3} {(nu) (Theta)} {CNV $l$} };
@@ -258,138 +297,156 @@ EM-алгоритм (от английского \textit{"EM"} — \textit{"Expe
 		%			
 	}
 \end{figure}
+Это т.н. plate notation — часто используемый способ краткой записи графических байесовских моделей с повторяющимися фрагментами. Ориентированное ребро означает, что вершина-исток задаёт распределение вершины-стока. Серый цвет кодирует известные данные. Фиолетовый цвет — авторская вольность, он кодирует скрытые величины, предказанные по данным на этапе предобработки. Белый цвет кодирует скрытые переменные, распределения на которых выводятся в ходе обучения модели. Величины, принадлежащие одному прямоугольнику, образуют смысловой блок, который повторяется для каждого из объектов (например, клетки).
 
-\noindent In this model, clonal assignment $ \mathbf{I^{G}} $ of cells in scDNA sample is assumed fixed. For each clone $ k $, for each same-CNV block $ i $ the clonal CNV state $ \mathbf{T}_{i,k} $ is defined to be the most frequent CNV state in that position across all cells assigned to clone $ k $. Clonal assignment $ \mathbf{I^{E}} $ in scRNA sample is learned.\\
-
-\noindent This model learns the clonal structure in scRNA sample using ASE profiles from scDNA.
-
-\textbf{Basic definitions}
-\begin{enumerate}
-	\item \textbf{Constants:}
-	\begin{itemize}
-		\item $ M^{G}, M^{E} $ — number of cells in scDNA and scRNA samples respectively.
-		\item $ K $  — estimated number of clones in the sample.
-		\item $ N $ — number of same-CNV blocks in scDNA sample (also used in scRNA sample).
-		\item $ T_{\max} $ — maximal possible CNV number. User-defined with the default of 5.
-		\item $ \tau $ — set of possible CNV configurations: 
-		$$\{(1, 0), (0, 1), (2, 0), (1, 1), (1, 2), \ldots, T_{\max}, 0), \ldots, (0, T_{\max}) \}$$ The case of zero CNV number should be treated with care if we can't say for sure whether the part of the chromosome (both arms) is deleted).
-	\end{itemize}
-	\item \textbf{Other known quantities:}
-	\begin{itemize}
-		\item $ \mathbf{D^{G}}, \mathbf{D^{E}} $ — total read counts. To get a count of the block, one simply adds up the counts of the variants within the block. Here we assume that variants are far enough from each other, so that almost no reads overlap two variants at the same time. Otherwise, adding things up wouldn't make sense.
-		\item $ \mathbf{A^{G}},\ \mathbf{A^{E}} $ — same for allele-specific counts.
-		\item $ \textbf{f} = (f_1, \ldots, f_K)$ — $K$-dimensional vector of estimated clonal fractions ($ \sum_{i=1}^{K} f_i = 1 $) 
-		\item $ \mathbf{T} $ — CNV states of blocks ($\mathbf{T_{i,k}}$ is a CNV state of a block $ i $ in clone $ k $).
-	\end{itemize}
-	\item \textbf{Inferred quantities:}
-	\begin{itemize}
-		\item $ \mathbf{\Theta} $ — allelic rates of variants located within blocks of fixed CNV status. $ \mathbf{\Theta_{i,t}} $ is an allelic rate of a block $i$ with a CNV status $t$. Set of blocks for each clone is unique. Blocks are ordered as tuples of the form (\textit{block start, block length}).
-		\item $ \mathbf{I^{E}} \in [K]^{M} $ — cell-to-clone assignment in scRNA sample.
-	\end{itemize}
-	\item \textbf{Some notational conventions:}
-	\begin{itemize}
-		\item Capitalized letter without superscript (like $ \mathbf{\Theta} $) denotes the information for both samples.
-		\item $ \mathbf{H^{G}}, \mathbf{H^{E}} $ — CNV status of the blocks in accordance with the current label assignment: 
-		$$ 
-			\mathbf{H^{G}_{i,j}} := \mathbf{T_{i, I^{G}_{j}}},\quad \mathbf{H^{E}_{i,j}} := \mathbf{T_{i, I^{E}_{j}}}
-		$$
-		\item  $ \mathbf{X^{G}},\ \mathbf{X^{E}} $ — a shortcut to simplify the notation: $\mathbf{X^{G|E}_{i,j}}$ is an allelic rate of a block $ i $ in cell $ j $ based of the current cell-to-clone label assignment.
-		$$ 
-			\mathbf{X^{G}_{i,j}} := \mathbf{\Theta_{i, H^{G}_{i,j}}},\quad \mathbf{X^{E}_{i,j}} := \mathbf{\Theta_{i, H^{E}_{i,j}}} 
-		$$
-	\end{itemize}
-\end{enumerate}
-\textbf{Generative model formulation}
+\paragraph{Статистическая модель}
+\begin{equation}
+	\begin{aligned}
+		\mathcal{L}(\bm{\Theta}, \bm{I^{E}}) &= \left (\prod_{j=1}^{M^{G}} \sum_{k^{G}=1}^{K}  \P(\bm{A^{G}_{j}}\ |\ \bm{D^{G}_{j}}, \bm{I^{G}_{j}} = k^{G}, \bm{\Theta}) \right ) \times\\
+		&\times \left (\prod_{j=1}^{M^{E}} \sum_{k^{E}=1}^{K}  \P(\bm{A_{j}}\ |\ \bm{D^{E}_{j}}, \bm{I^{E}_{j}} = k^{E}, \bm{\Theta}) \cdot \P(\bm{I^{E}_{j}} = k^{E}\ |\ \bm{f}) \right ) 
+	\end{aligned}
+\end{equation}
+где отдельные сомножители записываются так:
 \begin{itemize}
-	\item \textbf{Cell-to-clone assignment posterior:}
-	\begin{equation}
-		\P(\mathbf{I^{E}_{j}} = k_{0} \ |\  \mathbf{A_{j}}, \mathbf{D_{j}}, \mathbf{f}, \mathbf{\Theta}) =  
-		\dfrac{\P(\mathbf{A_j} \ |\  \mathbf{D_j}, \mathbf{I^{E}_{j}} = k_{0}, \mathbf{\Theta}) \P(\mathbf{I^{E}_{j}} = k_{0} \ |\  \textbf{f}) }{\sum\limits_{k=1}^{K}\P(\mathbf{A_j} \ |\  \mathbf{D_j}, \mathbf{I^{E}_{j}} = k, \mathbf{\Theta}) \P(\mathbf{I^{E}_{j}} = k\ |\  \textbf{f}) }
-	\end{equation}
-	
-	\item \textbf{ASE model:}
+	\item \textbf{Апостериорное распределение на клональных метках:}
 	\begin{equation}
 		\begin{aligned}
-			\P(\mathbf{A^{G}_{i,j}}\ |\ \mathbf{D^{G}_{i,j}}, \mathbf{\Theta}) &= \mathrm{Binom}(\mathbf{A^{G}_{i,j}}\ |\ \mathbf{D^{G}_{i,j}}, \mathbf{X^{G}_{i,j}})\\
-			\P(\mathbf{A^{E}_{i,j}}\ |\ \mathbf{D^{E}_{i,j}}, \mathbf{\Theta}) &= \mathrm{Binom}(\mathbf{A^{E}_{i,j}}\ |\ \mathbf{D^{E}_{i,j}}, \mathbf{X^{E}_{i,j}}) 
+			&\P(\bm{I^{E}_{j}} = k_{0} \ |\  \bm{A_{j}}, \bm{D_{j}}, \bm{f}, \bm{\Theta}) =\\
+			&= \dfrac{\P(\bm{A_j} \ |\  \bm{D_j}, \bm{I^{E}_{j}} = k_{0}, \bm{\Theta}) \P(\bm{I^{E}_{j}} = k_{0} \ |\  \textbf{f}) }{\sum\limits_{k=1}^{K}\P(\bm{A_j} \ |\  \bm{D_j}, \bm{I^{E}_{j}} = k, \bm{\Theta}) \P(\bm{I^{E}_{j}} = k\ |\  \textbf{f}) }
 		\end{aligned}
 	\end{equation}
-	
-	\item \textbf{ASE likelihood (both terms factorize over variants):}
+	\item \textbf{Правдоподобие в BAF-модели:}
+	Клетки можно считать независимыми в совокупности, потому правдоподобие факторизуется по ним:
 	\begin{equation}
 		\begin{aligned}
-			\P(\mathbf{A^{G}_{j}}\ |\ \mathbf{D^{G}_{j}}, \mathbf{I^{G}_{j}} = k^{G}, \mathbf{\Theta^{E}}) &= \prod_{i=1}^{N} \mathrm{Binom}(\mathbf{A^{G}_{j}}\ |\ \mathbf{D^{G}_{j}}, \mathbf{\Theta_{i, k^{G}}})\\
-			\P(\mathbf{A^{E}_{j}}\ |\ \mathbf{D^{E}_{j}}, \mathbf{I^{E}_{j}} = k^{E}, \mathbf{\Theta}) &= \prod_{i=1}^{N} \mathrm{Binom}(\mathbf{A^{E}_{j}}\ |\ \mathbf{D^{E}_{j}}, \mathbf{\Theta_{i, k^{E}}})
+			\P(\bm{A^{G}_{j}}\ |\ \bm{D^{G}_{j}}, \bm{I^{G}_{j}} = k^{G}, \bm{\Theta^{E}}) &= \prod_{i=1}^{N} \P(\bm{A^{G}_{j}}\ |\ \bm{D^{G}_{j}}, \bm{X^{G}_{j}})\\
+			\P(\bm{A^{E}_{j}}\ |\ \bm{D^{E}_{j}}, \bm{I^{E}_{j}} = k^{E}, \bm{\Theta}) &= \prod_{i=1}^{N} \P(\bm{A^{E}_{j}}\ |\ \bm{D^{E}_{j}}, \bm{X^{E}_{j}})
 		\end{aligned}
 	\end{equation}
-	
-	\item \textbf{Allelic rate likelihood:} 
+	Если блоки тоже считать независимыми в совокупности, то правдоподобие клетки факторизуется по ним, а правдоподобие отдельного блока подчиняется биномиальному закону:
 	\begin{equation}
 		\begin{aligned}
-			\mathcal{L}(\mathbf{\Theta}) &= \left (\prod_{j=1}^{M^{G}} \sum_{k^{G}=1}^{K}  \P(\mathbf{A^{G}_{j}}\ |\ \mathbf{D^{G}_{j}}, \mathbf{I^{G}_{j}} = k^{G}, \mathbf{\Theta}) \right ) \times\\
-			&\times \left (\prod_{j=1}^{M^{E}} \sum_{k^{E}=1}^{K}  \P(\mathbf{A_{j}}\ |\ \mathbf{D^{E}_{j}}, \mathbf{I^{E}_{j}} = k^{E}, \mathbf{\Theta}) \cdot \P(\mathbf{I^{E}_{j}} = k^{E}\ |\ \mathbf{f}) \right ) 
+		\P(\bm{A^{G}_{i,j}}\ |\ \bm{D^{G}_{i,j}}, \bm{\Theta}) &= \mathrm{Binom}(\bm{A^{G}_{i,j}}\ |\ \bm{D^{G}_{i,j}}, \bm{X^{G}_{i,j}})\\
+		\P(\bm{A^{E}_{i,j}}\ |\ \bm{D^{E}_{i,j}}, \bm{\Theta}) &= \mathrm{Binom}(\bm{A^{E}_{i,j}}\ |\ \bm{D^{E}_{i,j}}, \bm{X^{E}_{i,j}}) 
 		\end{aligned}
 	\end{equation}
-	To view the clonal assignment in a Bayesian way, we introduce informative prior $ \mathbf{\nu} $ for $\mathbf{\Theta}$.\\ 
-	Using that <<posterior $ \propto $ prior $\times$ likelihood>>, we obtain:
-	\begin{equation}
-		\begin{aligned}
-			&\P(\mathbf{\Theta}\ |\ \mathbf{A}, \mathbf{D}, \mathbf{f}, \mathbf{\nu}) \propto \P(\mathbf{\Theta}\ |\ \mathbf{\nu}) \times \mathcal{L}(\mathbf{\Theta}) =\\
-			&= \prod_{l=1}^{N} \prod_{t\in\tau} \mathrm{Beta}(\alpha_{l,\tau}, \beta_{l,\tau}) \times \mathcal{L}(\mathbf{\Theta})
-		\end{aligned}
-	\end{equation}
-	Parameters $\alpha_{t}, \beta_{t}$ are selected in such a way that the mode of $\mathrm{Beta}(\alpha_{t}, \beta_{t})$ equals to $ 1 / t $ \footnote{because if we assume that allelic rates only depend on the CNV status $ t $ then those rates could be computed as $ 1 / t $}.
 \end{itemize}
-\textbf{Selecting a prior for $\mathbf{\Theta}$}
-CNV state of $t$ hides a plethora of possible configurations: it can mean "$ k $ copies of maternal chromosome and $ t - k $ copies of paternal" for any $ k \in \{0, \ldots, t\} $, all the variants are possible. But they are not equally possible: some are more supported by evidence than the rest. During initialization, for each block in each clone we should find the $ (k, t) $-configuration $ (k_0, t) $, such that $ k_0 / t $ is as close to the observed ASE ratio as possible. Then we choose values $ (\alpha, \beta) $ such that the mode of $ \mathrm{Beta}(\alpha, \beta) $, given by $ (\alpha - 1) / (\alpha + \beta - 2) $, equals to $ k_0 / t $. That means, we must solve the following problem:
-$$
-\dfrac{\alpha - 1}{\alpha + \beta - 2} = \frac{k_0}{t},\ \alpha \ge 1,\ \beta \ge 1
-$$
-Let's derive the solution. If $ k_0 = 0 $, it is clear that $ \alpha = 1 $, while any $ \beta > 1 $ works\footnote{Nevertheless, it is not clear which one to choose. As we try to reduce prior bias, let's set it to be equal $ 1 + \eps $  for some reasonable $ \eps > 0 $}. Otherwise:
-\begin{equation}
-\begin{aligned}
-(\alpha - 1) t &= (\alpha + \beta - 2) k_0\\
-k_0 \beta &= (t - k_0) \alpha -t + 2 k_0\\
-\beta &= \left (\frac{t}{k_0} - 1\right ) \alpha - \left (\frac{t}{k_0} - 2 \right )\\
-&\implies \alpha = 1 + \frac{t - 2k_0}{t - k_0},\ \beta = 1
-\end{aligned}
-\end{equation}
-As $ \beta $ is linearly dependent from $ \alpha $, any increase in $ \alpha $ will pull $ \beta $ up, "sharpening" the shape of the distribution and making it more biased, thereby we decided to choose the minimal feasible $ \alpha $.\\
-\textbf{Inference (Gibbs sampler)}
-To use a Gibbs sampler, we define conditional probability distribution for each scalar random variable:\\
-\textbf{Cell-to-clone label assignment:} 
+
+На параметрах $\bm{\Theta}$ задано априорное распределение $ \bm{\nu} $. Итоговая BAF-модель подчиняется бета-биномиальному закону. По формуле Байеса отсюда получаем следующую пропорциональность для апостериорного распределения:
 \begin{equation}
 	\begin{aligned}
-		\P(\mathbf{I^{E}_j} = k\ |\ \mathbf{I^{E}_{-j}}, \mathbf{A^{E}}, \mathbf{D^{E}}, \mathbf{f}, \mathbf{\Theta}) 
-		&\propto \P(\mathbf{A^{E}_{j}}\ |\ \mathbf{D^{E}_{j}}, \mathbf{I^{E}_{j}} = k, \mathbf{\Theta}) \cdot \P(\mathbf{I^{E}_{j}} = k\ |\ \mathbf{f}) 
+		&\P(\bm{\Theta}\ |\ \bm{A}, \bm{D}, \bm{f}, \bm{\nu})\ \propto\ \P(\bm{\Theta}\ |\ \bm{\nu}) \times \mathcal{L}(\bm{\Theta}) =\\
+		&= \prod_{l=1}^{N} \prod_{t\in\tau} \mathrm{Beta}(\alpha_{l,\tau}, \beta_{l,\tau}) \times \mathcal{L}(\bm{\Theta})
 	\end{aligned}
 \end{equation}
-\textbf{Allelic rates:}
-Assuming fixed assignment, let's expand the joint likelihood equation: 
+Где параметры $\alpha_{l, t}, \beta_{l, t}$ задаются таким образом, что мода $\mathrm{Beta}(\alpha_{t}, \beta_{t})$, задаваемая выражением $ (\alpha_{l,t} - 1) / (\alpha_{l,t} + \beta_{l,t} - 2) $, равняется $ t_{0} / (t_{0} + t_{1}) $, ведь в теории доля прочтений материнских аллелей внутри сегмента $l$ должна мало отличаться от доли копий сегмента на материнской хромосоме. Опуская для кракости индексы, можно формализовать задачу так:
+$$
+	\dfrac{\alpha - 1}{\alpha + \beta - 2} = \frac{t_0}{t_0 + t_1},\ \alpha \ge 1,\ \beta \ge 1
+$$
+Разберём случаи:
+\begin{itemize}
+\item Если $ t_0 = 0 $, то очевидно, что $ \alpha = 1 $ и любое $ \beta > 1 $ подходит (для определённости, можно положить его равным $1 + \eps$ для какого-нибудь $\eps > 0$).
+\item Если $ t_0 > 0$, то:
 \begin{equation}
-	\begin{aligned}
-		&\P(\mathbf{\Theta}\ |\ \mathbf{A}, \mathbf{D}, \mathbf{I^{G}}, \mathbf{I^{E}}, \mathbf{f}, \mathbf{\nu}) \propto\\
-		&\propto \left\{\prod_{l=1}^{N} \prod_{t\in \tau}\mathrm{Beta}(\alpha_{T_{l,t}}, \beta_{T_{l,t}}) \right\} 
-		\left[ \prod_{j^{G}=1}^{M^{G}} \P(\mathbf{A^{G}_{j^{G}}}\ |\ \mathbf{D^{G}_{j^{G}}}, \mathbf{I^{G}_{j^{G}}}, \mathbf{\Theta}) \right] 
-		\left[\prod_{j^{E}=1}^{M^{E}} \P(\mathbf{A^{E}_{j^{E}}}\ |\ \mathbf{D^{E}_{j^{E}}}, \mathbf{I^{E}_{j^{E}}}, \mathbf{\Theta}) \right]  =\\
-		&= \prod_{l=1}^{N} \prod_{t\in \tau} \mathrm{Beta}(\alpha_{T_{l,t}}, \beta_{T_{l,t}}) 
-		\left[ \prod_{j^{G}=1}^{M^{G}} \mathrm{Binom}(\mathbf{A^{G}_{j^{G}}}\ |\ \mathbf{D^{G}_{j^{G}}}, \mathbf{\Theta_{i, t}}) \right] \left[\prod_{j=1}^{M^{E}} \mathrm{Binom}(\mathbf{A^{E}_{j^{E}}}\ |\ \mathbf{D^{E}_{j^{E}}}, \mathbf{\Theta_{i, t}}) \right]  =\\
-		&= \prod_{l=1}^{N} \prod_{t \in \tau} \left[ \mathrm{Beta}(\alpha_{T_{l,t}}, \beta_{T_{l,t}}) \prod_{j^{G}=1}^{M^{G}} \prod_{j^{E}=1}^{M^{E}} \left( \begin{aligned}
-			 &\mathrm{Binom}(\mathbf{A^{G}_{l,j^{G}}}\ |\ \mathbf{D^{G}_{l,j^{G}}}, \mathbf{X^{G}_{l,j^{G}}})^{\mathbb{I} \left\{ \mathbf{H^{G}_{l,j^{G}}} = t \right\}} \times \\
-			&\times \mathrm{Binom}(\mathbf{A^{E}_{l,j^{E}}}\ |\ \mathbf{D^{E}_{l,j^{E}}}, \mathbf{X^{E}_{l,j^{E}}})^{\mathbb{I} \left\{ \mathbf{H^{E}_{l,j^{E}}} = t \right\}} \end{aligned} \right) \right]
-	\end{aligned}
+	\begin{gathered}
+		(\alpha - 1) (t_0 + t_1) = (\alpha + \beta - 2) t_0\\
+		 t_1 \alpha - (t_0 + t_1) + 2 t_0 = t_0 \beta\\
+		\beta = \frac{t_1}{t_0} \alpha + \left(1 - \frac{t_1}{t_0}\right)
+	\end{gathered}
 \end{equation}
-From here we derive update rules for individual allelic rates:
+	При $\alpha = C$ отсюда получаем, что:
+	$$
+		\beta = (C - 1) \frac{t_1}{t_0}  + 1
+	$$
+	Можно взять любое $C > 1$, причём чем эта константа больше, тем более сильные априорные предположения и тем меньше допустимое отклонение от них.
+\end{itemize}
+
+\subsubsection{Поиск оптимальных параметров}
+Для поиска оценки апостериорного максимума для параметров модели используется семплирование по Гиббсу. Это частный случай алгоритма Метрополиса-Гастингса, основанное на знании условного распределения каждого параметра модели при фиксированных остальных. В силу того, что этот метод работает довольно медленно, от него было решено отказаться в пользу вариационного байесовского вывода в более поздних версиях XClone, потому подробный обзор метода в общем случае в данной работе не приводится. Заинтересованный читатель может ознакомиться с ним в классической книге Бишопа\cite{Bishop2006PRML}. Важным практическим соображением является то, что семлпирование по Гиббсу, в отличие от вариационного байесовского вывода, в пределе обязательно даёт оценку максимума а постериори, но явных оценок на скорость сходимости обоих методов нет, а на практике семплирование по Гиббсу работает гораздо медленнее.
+
+Для того, использовать семплирование по Гиббсу, нужно знать распределение для каждого из параметров при фиксированных остальных. Для \textbf{клональных меток} эти распределения имеют простой вид: 
+\begin{claim}
+	При фиксированных остальных параметрах модели верна формула
+	\begin{equation}
+		\begin{aligned}
+			&\P(\bm{I^{E}_j} = k\ |\ \bm{I^{E}_{-j}}, \bm{A^{E}}, \bm{D^{E}}, \bm{f}, \bm{\Theta})\ \propto\\ 
+			&\propto\ \P(\bm{A^{E}_{j}}\ |\ \bm{D^{E}_{j}}, \bm{I^{E}_{j}} = k, \bm{\Theta}) \P(\bm{I^{E}_{j}} = k\ |\ \bm{f}) 
+		\end{aligned}
+	\end{equation}
+	Где $\P(\bm{I^{E}_{j}} = k\ |\ \bm{f}) $ это константа, а $\P(\bm{A^{E}_{j}}\ |\ \bm{D^{E}_{j}}, \bm{I^{E}_{j}} = k, \bm{\Theta})$ это просто правдоподобие в бета-биномиальной BAF-модели.
+\end{claim}
+\begin{proof}
+	Согласно формуле Байеса,
+	\begin{equation*}
+		\begin{aligned}
+			&\P(\bm{I^{E}_j} = k\ |\ \bm{I^{E}_{-j}}, \bm{A^{E}}, \bm{D^{E}}, \bm{f}, \bm{\Theta}) =\\
+			&= \dfrac{\P(\bm{I^{E}_{-j}}, \bm{A^{E}} \ |\ \bm{D^{E}}, \bm{I^{E}_j} = k, \bm{f},  \bm{\Theta}) \P(\bm{I^{E}_j} = k\ |\ \bm{f})}{\sum_{c = 1}^{K} \P(\bm{I^{E}_{-j}}, \bm{A^{E}} \ |\ \bm{D^{E}}, \bm{I^{E}_j} = c, \bm{f},  \bm{\Theta}) \P(\bm{I^{E}_j} = c\ |\ \bm{f}) }
+		\end{aligned}
+	\end{equation*}
+	Клетки независимы в совокупности по предположению, потому числитель распадается в произведение по ним. Сомножители, не относящиеся к клетке $j$, в числителе и знаменателе сократятся, и в итоге получится
+	\begin{equation*}
+			\begin{aligned}
+				&\P(\bm{I^{E}_j} = k\ |\ \bm{I^{E}_{-j}}, \bm{A^{E}}, \bm{D^{E}}, \bm{f}, \bm{\Theta}) =\\
+				&= \dfrac{\P(\bm{A^{E}_{j}} \ |\ \bm{D^{E}_{j}}, \bm{I^{E}_j} = k, \bm{f}) \P(\bm{I^{E}_j} = k \ |\ \bm{f})}{\sum_{c = 1}^{K} \P(\bm{A^{E}_{j}} \ |\ \bm{D^{E}_{j}}, \bm{I^{E}_j} = c, \bm{f},  \bm{\Theta} ) \P(\bm{I^{E}_j} = c\ |\ \bm{f}) }
+			\end{aligned}
+		\end{equation*}
+\end{proof}
+Формулы для \textbf{аллельных частот} тоже, в целом, естественные:
+\begin{claim}
+ При фиксированных остальных параметрах модели верна формула
 \begin{equation}
-	\mathbf{\Theta_{l,t}}\ |\ \mathbf{I^{G}}, \mathbf{I^{E}} \sim \mathrm{Beta}(\alpha_{T_{l,t}} + u_{l,t}, \beta_{T_{l,t}} + v_{l,t})
+	\begin{gathered}
+		\bm{\Theta_{l,t}}\ |\ \bm{I^{G}}, \bm{I^{E}} \sim \mathrm{Beta}(\alpha_{l,t} + u_{l,t}, \beta_{l,t} + v_{l,t})\\
+		u_{l,t} = \sum_{j^{G}=1}^{M} \bm{A^{G}_{l,j^{G}}} \cdot \mathbb{I}\left\{ \bm{H^{G}_{l,j^{G}}} = t \right\} + \sum_{j^{E}=1}^{M} \bm{A^{E}_{l,j^{E}}} \cdot \mathbb{I}\left\{ \bm{H^{E}_{l,j^{E}}} = t \right\}\\
+		v_{l,t} =\sum_{j^{G}=1}^{M^{G}} \bm{B^{G}_{l,j^{G}}} \cdot \mathbb{I}\left\{ \bm{H^{G}_{l,j^{G}}} = t \right\} + \sum_{j^{E}=1}^{M^{E}} \bm{B^{E}_{l,j^{E}}} \cdot \mathbb{I}\left\{ \bm{H^{E}_{l,j^{E}}} = t \right\}
+	\end{gathered}
 \end{equation}
-where
-\begin{equation}
-\begin{aligned}
-	&u_{l,t} = \sum_{j^{G}=1}^{M} \mathbf{A^{G}_{l,j^{G}}} \cdot \mathbb{I}\left\{ \mathbf{H^{G}_{l,j^{G}}} = t \right\} + \sum_{j^{E}=1}^{M} \mathbf{A^{E}_{l,j^{E}}} \cdot \mathbb{I}\left\{ \mathbf{H^{E}_{l,j^{E}}} = t \right\}\\
-	& v_{l,t} =\sum_{j^{G}=1}^{M^{G}} (\mathbf{D^{G}_{l,j^{G}}} - \mathbf{A^{G}_{l,j^{G}}}) \cdot \mathbb{I}\left\{ \mathbf{H^{G}_{l,j^{G}}} = t \right\} + \sum_{j^{E}=1}^{M} (\mathbf{D^{E}_{l,j^{E}}} - \mathbf{A^{E}_{l,j^{E}}}) \cdot \mathbb{I}\left\{ \mathbf{H^{E}_{l,j^{E}}} = t \right\}
-\end{aligned}
-\end{equation}
+где $\bm{B_{l,j}} := \bm{D_{l,j}} - \bm{A_{l,j}}$.
+\end{claim}
+\begin{proof}
+	Для того, чтобы получить формулы для конкретного $\Theta_{i,t}$ при известных остальных параметрах, нужно расписать апостериорное распределение всех аллельных частот, предполагая их все неизвестными:
+	\begin{equation*}
+		\footnotesize
+		\begin{aligned}
+			&\P(\bm{\Theta}\ |\ \bm{A}, \bm{D}, \bm{I^{G}}, \bm{I^{E}}, \bm{f}, \bm{\nu}) \propto\\
+			&\propto \left\{\prod_{l=1}^{N} \prod_{t\in \tau}\mathrm{Beta}(\alpha_{l,t}, \beta_{l,t}) \right\} 
+			\left[ \prod_{j^{G}=1}^{M^{G}} \P(\bm{A^{G}_{j^{G}}}\ |\ \bm{D^{G}_{j^{G}}}, \bm{I^{G}_{j^{G}}}, \bm{\Theta}) \right] 
+			\left[\prod_{j^{E}=1}^{M^{E}} \P(\bm{A^{E}_{j^{E}}}\ |\ \bm{D^{E}_{j^{E}}}, \bm{I^{E}_{j^{E}}}, \bm{\Theta}) \right]  =\\
+			&= \prod_{l=1}^{N} \prod_{t\in \tau} \mathrm{Beta}(\alpha_{l,t}, \beta_{l,t}) 
+			\left[ \prod_{j^{G}=1}^{M^{G}} \mathrm{Binom}(\bm{A^{G}_{j^{G}}}\ |\ \bm{D^{G}_{j^{G}}}, \bm{\Theta_{i, t}}) \right] \left[\prod_{j=1}^{M^{E}} \mathrm{Binom}(\bm{A^{E}_{j^{E}}}\ |\ \bm{D^{E}_{j^{E}}}, \bm{\Theta_{i, t}}) \right]  =\\
+			&= \prod_{l=1}^{N} \prod_{t \in \tau} \left[ \mathrm{Beta}(\alpha_{l,t}, \beta_{l,t}) \prod_{j^{G}=1}^{M^{G}} \prod_{j^{E}=1}^{M^{E}} \left( \begin{aligned}
+				 &\mathrm{Binom}(\bm{A^{G}_{l,j^{G}}}\ |\ \bm{D^{G}_{l,j^{G}}}, \bm{X^{G}_{l,j^{G}}})^{\mathbb{I} \left\{ \bm{H^{G}_{l,j^{G}}} = t \right\}} \times \\
+				&\times \mathrm{Binom}(\bm{A^{E}_{l,j^{E}}}\ |\ \bm{D^{E}_{l,j^{E}}}, \bm{X^{E}_{l,j^{E}}})^{\mathbb{I} \left\{ \bm{H^{E}_{l,j^{E}}} = t \right\}} \end{aligned} \right) \right]
+		\end{aligned}
+	\end{equation*}
+	Отсюда, расписав формулы выше, можно получить параметры апостериорного распределения. Это простое, но утомительное техническое рассуждение, потому остаток доказательства опущен для краткости изложения.
+\end{proof}
+
+Поиск оптимальных параметров модели устроен следующим образом:
+\begin{algorithm}[H]
+	\SetAlgoLined
+	\KwResult{$\bm{I^{E}_{\ast}}, \bm{\Theta_{\ast}}$ — приближение ОМА}
+	\text{Проинициализировать $\bm{I^{E}}$ случайным образом.}\;
+	\While{\text{$\mathcal{L}(\bm{\Theta}, \bm{I^{E}})$ растёт}} { 
+		\For{$j = 1$ \KwTo $M^{E}$ \KwBy $1$}{
+			$\bm{C_{j}} := c_{j} \sim \P(\bm{I^{E}_j} = k\ |\ \bm{I^{E}_{-j}}, \bm{A^{E}}, \bm{D^{E}}, \bm{f}, \bm{\Theta})$\;
+		}
+		\For{$l = 1$ \KwTo $N$ \KwBy $1$}{
+			\ForEach{$t \in \tau$} {
+				$\bm{\Phi_{l,t}} := \phi_{l, t} \sim \P(\Theta_{l,t}\ |\ \bm{I^{G}}, \bm{I^{E}}, \ldots)$\;
+			}			
+		}
+		\If{$\mathcal{L}(\bm{\Phi}, \bm{C}) > \mathcal{L}(\bm{\Theta}, \bm{I^{E}})$} {
+			$\bm{\Theta} = \bm{\Phi}$\; 
+			$\bm{I^{E}} = \bm{C}$\;
+		}
+	}
+	$\bm{I^{E}_{\ast}} := \bm{I^{E}}$\;
+	$\bm{\Theta_{\ast}} := \bm{\Theta}$\;
+	\caption{Семплирование по Гиббсу в модели XClone-V1}
+\end{algorithm}
+
+
 \subsubsection{Поиск наиболее вероятной перестановки меток}
 При валидации модели на синтетических данных ключевым предсказываемым объектом было распределение вероятностей на $K$ клональных метках — матрица 
 $$
@@ -478,7 +535,7 @@ BAF- и RDR-модули связаны скрытыми переменными 
 	\label{Eq:xclone_vb_rdr_lik}
 \end{equation}
 
-Если $\bm{m}$ заранее неизвестно, то его можно смоделировать посредством задания априорного распределения $\mathtt{Dirichlet}(\bm\omega)$. Аналогично для $\mathbf{\gamma}$ в качестве априорного распределения задаётся $\mathtt{GP}(\bm\mu, \bm\Sigma)$, где под $\mathtt{GP}$ подразумевается дискретный гауссовский процесс с $\mu_t := \log((c_{t,m} + c_{t,p}) / 2 + \varepsilon)$ для достаточного малого положительного $\varepsilon$, а матрица ковариаций $\bm\Sigma$ задаётся RBF-ядром $K(\bm c_t, \bm c_{t\prime}) := l_1 \exp\{-l_2[(c_{t,m}-c_{t\prime,m})^2 + (c_{t,p}-c_{t\prime,p})^2]\}$, где $l_1,\ l_2$ — гиперпараметры модели. В формульной записи:
+Если $\bm{m}$ заранее неизвестно, то его можно смоделировать посредством задания априорного распределения $\mathtt{Dirichlet}(\bm\omega)$. Аналогично для $\bm{\gamma}$ в качестве априорного распределения задаётся $\mathtt{GP}(\bm\mu, \bm\Sigma)$, где под $\mathtt{GP}$ подразумевается дискретный гауссовский процесс с $\mu_t := \log((c_{t,m} + c_{t,p}) / 2 + \varepsilon)$ для достаточного малого положительного $\varepsilon$, а матрица ковариаций $\bm\Sigma$ задаётся RBF-ядром $K(\bm c_t, \bm c_{t\prime}) := l_1 \exp\{-l_2[(c_{t,m}-c_{t\prime,m})^2 + (c_{t,p}-c_{t\prime,p})^2]\}$, где $l_1,\ l_2$ — гиперпараметры модели. В формульной записи:
 \begin{equation}
 	\begin{split}
 		\bm m\ |\ \bm \omega &\sim \mathtt{Dirichlet}( \bm\omega)\\
@@ -523,7 +580,7 @@ $$
 Вариационный байесовский вывод (далее — VB) основан на следующей идее: заменить апостериорное распределение $Q(\theta\ |\ \bm{X})$, которое может быть устроено сколь угодно сложно, на удобную для оптимизации аппроксимацию $ Q^{\ast}(\theta) $ из семейства распределений $\mathcal{Q}$. Тогда есть следующий алгоритм приближённого поиска ОМА:
 
 \begin{algorithm}[H]
-	\SetAlgoLined
+	Lined
 	\KwResult{$\theta^{\ast}_{0}, Q^{\ast}_{0}$ — приближение ОМА и соотв. аппроксимация }
 	$Q^{\ast}_{0} := \arg\min\limits_{Q^{\ast} \in \mathcal{Q}} KL(Q^{\ast}\ \|\ Q(\cdot\ |\ \bm{X})) $\;
 	$\theta^{\ast}_{0} := \arg\max\limits_{\theta \in \Theta} Q^{\ast}_{0}(\theta) $
@@ -848,3 +905,16 @@ $$
 
 \paragraph{Отсутствие явной связи с деревом онкогенеза}$ $\\
 В данный момент явным образом не используется то, что онкогенез описывается деревом, где каждое ветвление соответствует важной наследуемой мутации. Если бы алгоритм XClone моделировал эту структуру явно, т.е. обрабатывал каждый уровень дерева по отдельности: сначала отделял опухолевые клетки от нормальных, потом находил грубые клональные линии, потом рекурсивно уточнял каждую из них — это бы повысило интерпретируемость результатов. 
+
+\subsection{Использованные данные}
+Работа над XClone была мотивирована наличием данных секвенирования образцов медуллобластомы — детской опухоли мозга, — недавно извлечённых хирургическим путём в одной из клиник Штутгарта. Из предварительного анализа данных bulk-секвенирования было известно, что у этого пациента эволюция опухоли сопровождалась масштабными структурными вариациями. Были обнаружены делекции и дупликации больших участков генома, а также хромотприсис на хромосоме 7. Кроме того, у пациента случился рецидив и был повод предполагать, что на какие-то из клональных линий лечение не дейстувует. Сам пациент при этом перенёс ещё одну операцию, потому в распоряжении биологов были две опухоли: \textbf{primary} (до лечения) и \textbf{relapse} (после).
+
+Для детекции структурных вариаций нужны данные ДНК-секвенирования, которые были только для первичной опухоли, поэтому данные из relapse-опухоли в данной работе не рассматриваются. Более того, отсеквенировать relapse-опухоль уже нельзя, потому что она уже полностью израсходована.
+
+Для первичной опухоли доступны следующие образцы: 
+\begin{itemize}
+	\item \textbf{STP-Nuclei} — \textit{Stuttgart Primary Tumour, single-Nuclei-seq} — ДНК- и РНК-образец, полученные по технологии single nucleus sequencing. В них секвенировалась не вся клетка целиком, а только извлечённое из неё ядро. Такой подход часто используют при секвенировании нейронных клеток, т.к. выделить их ядра, как оказалось, проще, чем разделить ткань на клетки (ведь нейрон имеет множество отростков-дендритов, из-за которых клетки крепко "держатся" друг за друга). В ДНК-образце 404 ядра, а в РНК-образце — порядка 6000 (в зависимости от выбранного порога качества). Именно этот образец был выбран для валидации XClone-V2, потому с его подробным описанием можно ознакомиться в разделе "Результаты".
+	\item \textbf{STP-G\&T} — \textit{Stuttgart Primary Tumour, Genome and Transcriptome} — геном и транскриптом, извлечённые из одних и тех же клеток. Секвенирование по такой технологии требует высокого профессионализма. Следствие этого — высокая цена и малая пропускная способность метода: в образцах всего 96 клеток. Тем не менее, они гораздо менее разреженные, чем в образце STP-Nuclei. Наличие таких данных в перспективе могло бы стать конкурентным преимуществом. Если метод обнаруживает корректную клональная структуру в ДНК-данных, то можно попробовать сопоставить клетки РНК-образца найденным клональным линиям и измерить точность предсказания. Это уникальная ситуация, т.к. клональные линии клеток из обычных scRNA-seq образцов заранее неизвестны и можно лишь строить гипотезы о корректности результатов предсказания. После того, как стало ясно, что стабильный BAF-сигнал из РНК-данных извлечь не получается, эти данные отошли на второй план, но ещё сыграют важную роль при валидации XClone-V3. При этом естественное желание слить ДНК-данные из этого образца с ДНК-данными из STP-Nuclei удовлетворить нельзя, т.к. для секвенирования были использованы разные платформы, а потому распределения прочтений в клетках сильно различаются.
+	\item \textbf{STP-PDX} — \textit{Stuttgart Patient Tumour, Patient-Derived Xenograft} — ДНК- и РНК-данные, полученные из т.н. mouse model — опухоль пересаживается в организм лабораторной мыши или крысы с искусственно вызванным иммунодефицитом. Это позволяет опухоли дорасти до нужного для экспериментов размера вне тела пациента. Эти данные пока не были использованы, т.к. ДНК-образец в них хуже, чем в STP-Nuclei, а объединить два образца в один нельзя, т.к. STP-PDX тоже были получены при помощи секвенирования на разных платформах.
+	\item Bulk-секвенирование длинными прочтениями — данные ДНК-секвенирования, полученные с помощью платформы Oxford Nanopore. Были попытки использовать их для уточнения статистического фазирования гаплотипов, но в итоге был сделан выбор в пользу более простого подхода.
+\end{itemize}
